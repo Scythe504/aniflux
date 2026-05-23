@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/scythe504/aniflux/internal/utils"
@@ -20,6 +21,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 	aniflux := r.PathPrefix("/aniflux").Subrouter()
 
 	aniflux.HandleFunc("/trending", s.trendingAnime)
+
+	aniflux.HandleFunc("/anime/{id}", s.getAnime)
 
 	return r
 }
@@ -109,4 +112,20 @@ func (s *Server) trendingAnime(w http.ResponseWriter, r *http.Request){
 	}
 
 	utils.WriteJSON(w, http.StatusOK, trendingMedia)
+}
+
+func (s *Server) getAnime(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 32)
+	if err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "invalid anilistId, must be a number")
+		return
+	}
+	media, err := s.rs.GetMedia(r.Context(), int(id))
+	if err != nil {
+		log.Println("[GetAnime]:",err)
+		utils.WriteError(w, http.StatusNotFound, "Not found")
+		return
+	}
+
+	utils.WriteJSON(w, http.StatusOK, media)
 }

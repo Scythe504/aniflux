@@ -45,12 +45,13 @@ func (c *Client) do(ctx context.Context, method, url string, body io.Reader) (*h
 	return resp, nil
 }
 
-func (c *Client) FetchAnilistMedia(ctx context.Context, id int, page *int, perPage *int) (*Media, error) {
+func (c *Client) FetchAnilistMedia(ctx context.Context, id int) (*Media, error) {
 	query := `query Media($id: Int) {
 		Media(id: $id, type: ANIME) {
 			id
 			episodes
 			bannerImage
+			description
 			season
 			popularity
 			duration
@@ -131,6 +132,7 @@ func (c *Client) FetchAnilistTrending(ctx context.Context, page int, perPage int
 					medium
 				}
 				countryOfOrigin
+				description
 				averageScore
 				format
 				genres
@@ -185,6 +187,7 @@ func (c *Client) FetchMediaBySeason(ctx context.Context, page int, perPage int, 
     media(type: ANIME, season: $season, seasonYear: $seasonYear) {
       id
 			episodes
+			description
 			bannerImage
 			season
 			popularity
@@ -257,6 +260,7 @@ func (c *Client) FetchMediaByGenre(ctx context.Context, page int, perPage int, g
 			season
 			popularity
 			duration
+			description
 			coverImage {
 				color
 				large

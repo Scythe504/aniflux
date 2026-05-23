@@ -60,6 +60,7 @@ type Media struct {
 	CountryOfOrigin   ORIGIN_COUNTRY     `json:"countryOfOrigin"`
 	AverageScore      int                `json:"averageScore"`
 	Format            string             `json:"format"`
+	Description string `json:"description"`
 	Genres            []Genre            `json:"genres"`
 	Title             Title              `json:"title"`
 	NextAiringEpisode *NextAiringEpisode `json:"nextAiringEpisode"`

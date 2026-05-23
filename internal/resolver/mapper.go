@@ -18,6 +18,7 @@ func toMedia(m anilist.Media) Media {
 		Type:          MediaTypeAnime,
 		Title:         title,
 		OriginalTitle: m.Title.Romaji,
+		Description: m.Description,
 		Cover:         m.CoverImage.Large,
 		Banner:        m.BannerImage,
 		Score:         float64(m.AverageScore) / 10,

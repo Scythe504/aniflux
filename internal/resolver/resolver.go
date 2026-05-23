@@ -12,6 +12,7 @@ import (
 type Resolver interface {
 	PLuginInfo() string
 	Trending(ctx context.Context, page, perPage int) ([]Media, error)
+	GetMedia(ctx context.Context, id int) (*Media, error)
 }
 
 type resolver struct {
@@ -54,4 +55,15 @@ func (rs *resolver) Trending(ctx context.Context, page, perPage int) ([]Media, e
 	}
 
 	return media, nil
+}
+
+func (rs *resolver) GetMedia(ctx context.Context, id int) (*Media, error) {
+	m, err := rs.anilist.FetchAnilistMedia(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	media := toMedia(*m)
+
+	return &media, nil
 }
