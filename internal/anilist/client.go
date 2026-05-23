@@ -36,7 +36,7 @@ func (c *Client) do(ctx context.Context, method, url string, body io.Reader) (*h
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
@@ -44,7 +44,6 @@ func (c *Client) do(ctx context.Context, method, url string, body io.Reader) (*h
 
 	return resp, nil
 }
-
 
 func (c *Client) FetchAnilistMedia(ctx context.Context, id int, page *int, perPage *int) (*Media, error) {
 	query := `query Media($id: Int) {
@@ -71,6 +70,8 @@ func (c *Client) FetchAnilistMedia(ctx context.Context, id int, page *int, perPa
 				native
 				userPreferred
 			}
+			status
+			seasonYear
 			nextAiringEpisode {
 				airingAt
 				episode
@@ -112,7 +113,6 @@ func (c *Client) FetchAnilistMedia(ctx context.Context, id int, page *int, perPa
 	return &response.Data.Media, nil
 }
 
-
 func (c *Client) FetchAnilistTrending(ctx context.Context, page int, perPage int) ([]Media, error) {
 	query :=
 		`query($page: Int, $perPage: Int) {
@@ -140,6 +140,8 @@ func (c *Client) FetchAnilistTrending(ctx context.Context, page int, perPage int
 					native
 					userPreferred
 				}
+				status
+				seasonYear
 			}
 		}
 	}`
@@ -174,7 +176,6 @@ func (c *Client) FetchAnilistTrending(ctx context.Context, page int, perPage int
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, err
 	}
-
 	return response.Data.Page.Media, nil
 }
 
@@ -183,27 +184,29 @@ func (c *Client) FetchMediaBySeason(ctx context.Context, page int, perPage int, 
   Page(page: $page, perPage: $perPage) {
     media(type: ANIME, season: $season, seasonYear: $seasonYear) {
       id
-      episodes
-      bannerImage
-      season
-      popularity
-      duration
-      coverImage {
-        color
-        large
-        extraLarge
-        medium
-      }
-      countryOfOrigin
-      averageScore
-      format
-      genres
-      title {
-        english
-        romaji
-        native
-        userPreferred
-      }
+			episodes
+			bannerImage
+			season
+			popularity
+			duration
+			coverImage {
+				color
+				large
+				extraLarge
+				medium
+			}
+			countryOfOrigin
+			averageScore
+			format
+			genres
+			title {
+				english
+				romaji
+				native
+				userPreferred
+			}
+			status
+			seasonYear
     }
   }
 }`
@@ -249,27 +252,29 @@ func (c *Client) FetchMediaByGenre(ctx context.Context, page int, perPage int, g
   Page(page: $page, perPage: $perPage) {
     media(type: ANIME, genre_in: $genreIn) {
       id
-      episodes
-      bannerImage
-      season
-      popularity
-      duration
-      coverImage {
-        color
-        large
-        extraLarge
-        medium
-      }
-      countryOfOrigin
-      averageScore
-      format
-      genres
-      title {
-        english
-        romaji
-        native
-        userPreferred
-      }
+			episodes
+			bannerImage
+			season
+			popularity
+			duration
+			coverImage {
+				color
+				large
+				extraLarge
+				medium
+			}
+			countryOfOrigin
+			averageScore
+			format
+			genres
+			title {
+				english
+				romaji
+				native
+				userPreferred
+			}
+			status
+			seasonYear
     }
   }
 }`

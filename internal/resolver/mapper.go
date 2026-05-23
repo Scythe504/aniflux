@@ -13,7 +13,6 @@ func toMedia(m anilist.Media) Media {
 	if title == "" {
 		title = m.Title.Romaji
 	}
-
 	return Media{
 		ID:            strconv.Itoa(m.ID),
 		Type:          MediaTypeAnime,
@@ -85,11 +84,11 @@ func toEpisode(az *anizip.Episode) Episode {
 func toSource(s *sources.TorznabItem) Source {
 
 	return Source{
-		Title: s.Title,
+		Title:     s.Title,
 		MagnetURI: s.MagnetURI,
-		InfoHash: s.InfoHash,
-		Seeders: s.Seeders,
-		Leechers: s.Leechers,
-		Size: s.Size,
+		InfoHash:  s.InfoHash,
+		Seeders:   s.Seeders,
+		Leechers:  s.Leechers,
+		Size:      s.Size,
 	}
 }

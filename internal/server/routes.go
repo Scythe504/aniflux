@@ -6,10 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	// "github.com/scythe504/aniflux/internal/anilist"
-	// "github.com/scythe504/aniflux/internal/anizip"
-	// "github.com/scythe504/aniflux/internal/sources"
-	// "github.com/scythe504/aniflux/internal/utils"
+	"github.com/scythe504/aniflux/internal/utils"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -20,11 +17,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	r.HandleFunc("/", s.HelloWorldHandler)
 
-	r.HandleFunc("/health", s.healthHandler)
+	aniflux := r.PathPrefix("/aniflux").Subrouter()
 
-	// aniflux := r.PathPrefix("/aniflux").Subrouter()
-
-	// aniflux.HandleFunc("/{anilistId}", s.Media)	
+	aniflux.HandleFunc("/trending", s.trendingAnime)
 
 	return r
 }
@@ -60,15 +55,6 @@ func (s *Server) HelloWorldHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(jsonResp)
 }
 
-func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	jsonResp, err := json.Marshal(s.db.Health())
-
-	if err != nil {
-		log.Fatalf("error handling JSON marshal. Err: %v", err)
-	}
-
-	_, _ = w.Write(jsonResp)
-}
 
 // func (s *Server) Media(w http.ResponseWriter, r *http.Request) {
 // 	anilistId, err := strconv.ParseInt(mux.Vars(r)["anilistId"], 10, 32)
@@ -110,3 +96,17 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 // 		"torznabResp": torznabResp,
 // 	})
 // }
+
+func (s *Server) trendingAnime(w http.ResponseWriter, r *http.Request){
+	page := 1
+	perPage := 5
+
+	trendingMedia, err := s.rs.Trending(r.Context(), page, perPage)
+	if err != nil {
+		log.Println(err)
+		utils.WriteError(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	utils.WriteJSON(w, http.StatusOK, trendingMedia)
+}

@@ -10,20 +10,19 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 
 	"github.com/scythe504/aniflux/internal/database"
+	"github.com/scythe504/aniflux/internal/resolver"
 )
 
 type Server struct {
 	port int
-
-	db database.Service
+	rs   resolver.Resolver
 }
 
 func NewServer() *http.Server {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
 	NewServer := &Server{
 		port: port,
-
-		db: database.New(),
+		rs:   resolver.New(database.New()),
 	}
 
 	// Declare Server config
