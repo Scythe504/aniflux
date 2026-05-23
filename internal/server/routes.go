@@ -6,6 +6,10 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	// "github.com/scythe504/aniflux/internal/anilist"
+	// "github.com/scythe504/aniflux/internal/anizip"
+	// "github.com/scythe504/aniflux/internal/sources"
+	// "github.com/scythe504/aniflux/internal/utils"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -17,6 +21,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.HandleFunc("/", s.HelloWorldHandler)
 
 	r.HandleFunc("/health", s.healthHandler)
+
+	// aniflux := r.PathPrefix("/aniflux").Subrouter()
+
+	// aniflux.HandleFunc("/{anilistId}", s.Media)	
 
 	return r
 }
@@ -61,3 +69,44 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, _ = w.Write(jsonResp)
 }
+
+// func (s *Server) Media(w http.ResponseWriter, r *http.Request) {
+// 	anilistId, err := strconv.ParseInt(mux.Vars(r)["anilistId"], 10, 32)
+
+// 	if err != nil {
+// 		utils.WriteError(w, http.StatusBadRequest, "invalid req parameter")
+// 		return
+// 	}
+
+// 	page := 1
+// 	perPage := 5
+// 	media, err := anilist.FetchAnilistMedia(int(anilistId), &page, &perPage, r.Context())
+
+// 	if err != nil {
+// 		log.Println(err)
+// 		utils.WriteError(w, http.StatusInternalServerError, "Failed To fetch anime")
+// 		return
+// 	}
+// 	log.Println(media.ID)
+
+// 	anizipResp, err := anizip.FetchAnizipData(anizip.AnilistID, media.ID)
+// 	if err != nil {
+// 		log.Println(err)
+// 		utils.WriteError(w, http.StatusInternalServerError, "Failed to fetch anizip data")
+// 		return
+// 	}
+
+// 	fmt.Println(anizipResp.Episodes["1"].AniDbEid)
+// 	torznabResp, err := sources.FetchSources(anizipResp.Episodes["1"].AniDbEid)
+// 	if err != nil {
+// 		log.Println(err)
+// 		utils.WriteError(w, http.StatusInternalServerError, "Failed to fetch tosho data")
+// 		return	
+// 	}
+
+// 	utils.WriteJSON(w, http.StatusOK, map[string]any{
+// 		"media": media,
+// 		"anizipResp": anizipResp,
+// 		"torznabResp": torznabResp,
+// 	})
+// }
