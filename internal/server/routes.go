@@ -24,6 +24,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	aniflux.HandleFunc("/anime/{id}", s.getAnime)
 
+	aniflux.HandleFunc("/anime/{id}/episodes", s.getEpisodes)
+
 	return r
 }
 
@@ -58,7 +60,6 @@ func (s *Server) HelloWorldHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(jsonResp)
 }
 
-
 // func (s *Server) Media(w http.ResponseWriter, r *http.Request) {
 // 	anilistId, err := strconv.ParseInt(mux.Vars(r)["anilistId"], 10, 32)
 
@@ -90,7 +91,7 @@ func (s *Server) HelloWorldHandler(w http.ResponseWriter, r *http.Request) {
 // 	if err != nil {
 // 		log.Println(err)
 // 		utils.WriteError(w, http.StatusInternalServerError, "Failed to fetch tosho data")
-// 		return	
+// 		return
 // 	}
 
 // 	utils.WriteJSON(w, http.StatusOK, map[string]any{
@@ -100,14 +101,14 @@ func (s *Server) HelloWorldHandler(w http.ResponseWriter, r *http.Request) {
 // 	})
 // }
 
-func (s *Server) trendingAnime(w http.ResponseWriter, r *http.Request){
+func (s *Server) trendingAnime(w http.ResponseWriter, r *http.Request) {
 	page := 1
 	perPage := 5
 
 	trendingMedia, err := s.rs.Trending(r.Context(), page, perPage)
 	if err != nil {
 		log.Println(err)
-		utils.WriteError(w, http.StatusNotFound, "not found")
+		utils.WriteError(w, http.StatusNotFound, "Not found")
 		return
 	}
 
@@ -117,15 +118,53 @@ func (s *Server) trendingAnime(w http.ResponseWriter, r *http.Request){
 func (s *Server) getAnime(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 32)
 	if err != nil {
-		utils.WriteError(w, http.StatusBadRequest, "invalid anilistId, must be a number")
+		utils.WriteError(w, http.StatusBadRequest, "Invalid anilistId, must be a number")
 		return
 	}
 	media, err := s.rs.GetMedia(r.Context(), int(id))
 	if err != nil {
-		log.Println("[GetAnime]:",err)
+		log.Println("[GetAnime]:", err)
 		utils.WriteError(w, http.StatusNotFound, "Not found")
 		return
 	}
 
 	utils.WriteJSON(w, http.StatusOK, media)
+}
+
+func (s *Server) getEpisodes(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 32)
+	if err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "Invalid anilist id")
+		return
+	}
+	rawPage := r.URL.Query().Get("page")
+	rawPerPage := r.URL.Query().Get("perPage")
+	var page, perPage int64
+	if rawPage == "" {
+		page = 1
+	} else {
+		page, err = strconv.ParseInt(rawPage, 10, 32)
+		if err != nil {
+			utils.WriteError(w, http.StatusBadRequest, "Invalid page query, value must be a number")
+			return
+		}
+	}
+	if rawPerPage == "" {
+		perPage = 24
+	} else {
+		perPage, err = strconv.ParseInt(rawPerPage, 10, 32)
+		if err != nil {
+			utils.WriteError(w, http.StatusBadRequest, "Invalid perPage query, value must be a number")
+			return
+		}
+	}
+
+	episodes, err := s.rs.GetEpisodes(r.Context(), int(id), int(page), int(perPage))
+	if err != nil {
+		log.Println("[GetEpisodes]:", err)
+		utils.WriteError(w, http.StatusNotFound, "Not found")
+		return
+	}
+
+	utils.WriteJSON(w, http.StatusOK, episodes)
 }

@@ -18,7 +18,7 @@ func toMedia(m anilist.Media) Media {
 		Type:          MediaTypeAnime,
 		Title:         title,
 		OriginalTitle: m.Title.Romaji,
-		Description: m.Description,
+		Description:   m.Description,
 		Cover:         m.CoverImage.Large,
 		Banner:        m.BannerImage,
 		Score:         float64(m.AverageScore) / 10,
@@ -74,6 +74,7 @@ func toEpisode(az *anizip.Episode) Episode {
 		title = az.Title.XJAT
 	}
 	return Episode{
+		Id:       az.AniDbEid,
 		Number:   az.EpisodeNumber,
 		Title:    title,
 		AirDate:  az.AirDateUtc,

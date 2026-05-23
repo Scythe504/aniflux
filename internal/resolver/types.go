@@ -48,11 +48,17 @@ type Airing struct {
 }
 
 type Episode struct {
+	Id       int    `json:"id"`
 	Number   int    `json:"number"`
 	Title    string `json:"title"`
 	AirDate  string `json:"air_date"`
 	Overview string `json:"overview"`
 	Image    string `json:"image"`
+}
+
+type EpisodeList struct {
+	Episodes []Episode `json:"episodes"`
+	Specials []Episode `json:"specials"`
 }
 
 type Source struct {
