@@ -19,11 +19,44 @@ type Client struct {
 func New() *Client {
 	return &Client{
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 15 * time.Second,
 		},
 		baseURL: os.Getenv("ANILIST_URL"),
 	}
 }
+
+const mediaFields = `id
+		episodes
+		bannerImage
+		description
+		season
+		popularity
+		duration
+		coverImage {
+			color
+			large
+			extraLarge
+			medium
+		}
+		countryOfOrigin
+		averageScore
+		format
+		genres
+		title {
+			english
+			romaji
+			native
+			userPreferred
+		}
+		status
+		seasonYear
+		nextAiringEpisode {
+			airingAt
+			episode
+			id
+			mediaId
+			timeUntilAiring
+		}`
 
 func (c *Client) do(ctx context.Context, method, url string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
@@ -46,42 +79,11 @@ func (c *Client) do(ctx context.Context, method, url string, body io.Reader) (*h
 }
 
 func (c *Client) FetchAnilistMedia(ctx context.Context, id int) (*Media, error) {
-	query := `query Media($id: Int) {
+	query := fmt.Sprintf(`query Media($id: Int) {
 		Media(id: $id, type: ANIME) {
-			id
-			episodes
-			bannerImage
-			description
-			season
-			popularity
-			duration
-			coverImage {
-				color
-				large
-				extraLarge
-				medium
-			}
-			countryOfOrigin
-			averageScore
-			format
-			genres
-			title {
-				english
-				romaji
-				native
-				userPreferred
-			}
-			status
-			seasonYear
-			nextAiringEpisode {
-				airingAt
-				episode
-				id
-				mediaId
-				timeUntilAiring
-			}
+			%s
 		}
-	}`
+	}`, mediaFields)
 
 	payload := map[string]any{
 		"query": query,
@@ -115,38 +117,13 @@ func (c *Client) FetchAnilistMedia(ctx context.Context, id int) (*Media, error) 
 }
 
 func (c *Client) FetchAnilistTrending(ctx context.Context, page int, perPage int) ([]Media, error) {
-	query :=
-		`query($page: Int, $perPage: Int) {
+	query := fmt.Sprintf(`query($page: Int, $perPage: Int) {
 		Page(page: $page, perPage: $perPage) {
 			media(type: ANIME, sort: [TRENDING_DESC]) {
-				id
-				episodes
-				bannerImage
-				season
-				popularity
-				duration
-				coverImage {
-					color
-					large
-					extraLarge
-					medium
-				}
-				countryOfOrigin
-				description
-				averageScore
-				format
-				genres
-				title {
-					english
-					romaji
-					native
-					userPreferred
-				}
-				status
-				seasonYear
+				%s
 			}
 		}
-	}`
+	}`, mediaFields)
 
 	payload := map[string]any{
 		"query": query,
@@ -181,47 +158,30 @@ func (c *Client) FetchAnilistTrending(ctx context.Context, page int, perPage int
 	return response.Data.Page.Media, nil
 }
 
-func (c *Client) FetchMediaBySeason(ctx context.Context, page int, perPage int, season SEASON, year int) ([]Media, error) {
-	query := `query($page: Int, $perPage: Int, $season: MediaSeason, $seasonYear: Int) {
+func (c *Client) FetchMediaBySeason(ctx context.Context, page int, perPage int, season *SEASON, year *int) ([]Media, error) {
+	query := fmt.Sprintf(`query($page: Int, $perPage: Int, $season: MediaSeason, $seasonYear: Int) {
   Page(page: $page, perPage: $perPage) {
-    media(type: ANIME, season: $season, seasonYear: $seasonYear) {
-      id
-			episodes
-			description
-			bannerImage
-			season
-			popularity
-			duration
-			coverImage {
-				color
-				large
-				extraLarge
-				medium
-			}
-			countryOfOrigin
-			averageScore
-			format
-			genres
-			title {
-				english
-				romaji
-				native
-				userPreferred
-			}
-			status
-			seasonYear
-    }
-  }
-}`
+    	media(type: ANIME, season: $season, seasonYear: $seasonYear) {
+      	%s
+    	}
+  	}
+	}`, mediaFields)
 
 	payload := map[string]any{
 		"query": query,
 		"variables": map[string]any{
-			"page":       page,
-			"perPage":    perPage,
-			"season":     season,
-			"seasonYear": year,
+			"page":    page,
+			"perPage": perPage,
 		},
+	}
+
+	if varsMap, ok := payload["variables"].(map[string]any); ok {
+		if season != nil {
+			varsMap["season"] = *season
+		}
+		if year != nil {
+			varsMap["seasonYear"] = *year
+		}
 	}
 
 	body, err := json.Marshal(payload)
@@ -241,7 +201,7 @@ func (c *Client) FetchMediaBySeason(ctx context.Context, page int, perPage int, 
 	if err != nil {
 		return nil, err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, err
@@ -250,38 +210,14 @@ func (c *Client) FetchMediaBySeason(ctx context.Context, page int, perPage int, 
 	return response.Data.Page.Media, nil
 }
 
-func (c *Client) FetchMediaByGenre(ctx context.Context, page int, perPage int, genre ...Genre) ([]Media, error) {
-	query := `query ($page: Int, $perPage: Int, $genreIn: [String]) {
+func (c *Client) FetchMediaByGenre(ctx context.Context, page int, perPage int, genre []string) ([]Media, error) {
+	query := fmt.Sprintf(`query ($page: Int, $perPage: Int, $genreIn: [String]) {
   Page(page: $page, perPage: $perPage) {
     media(type: ANIME, genre_in: $genreIn) {
-      id
-			episodes
-			bannerImage
-			season
-			popularity
-			duration
-			description
-			coverImage {
-				color
-				large
-				extraLarge
-				medium
-			}
-			countryOfOrigin
-			averageScore
-			format
-			genres
-			title {
-				english
-				romaji
-				native
-				userPreferred
-			}
-			status
-			seasonYear
+      %s
     }
   }
-}`
+}`, mediaFields)
 	payload := map[string]any{
 		"query": query,
 		"variables": map[string]any{
@@ -312,4 +248,108 @@ func (c *Client) FetchMediaByGenre(ctx context.Context, page int, perPage int, g
 		return nil, err
 	}
 	return response.Data.Page.Media, nil
+}
+
+// func (c *Client) FetchAiringMedia(ctx context.Context, page int, perPage int) ([]Media, error) {
+// 	query := fmt.Sprintf(``)
+// }
+
+func (c *Client) Search(ctx context.Context, page, perPage int, searchQuery string) ([]Media, error) {
+	query := fmt.Sprintf(`query Query($page: Int, $perPage: Int, $search: String) {
+		Page(page: $page, perPage: $perPage) {
+			media(search: $search) {
+			%s
+			}
+		}
+	}`, mediaFields)
+
+	payload := map[string]any{
+		"query": query,
+		"variables": map[string]any{
+			"page":    page,
+			"perPage": perPage,
+			"search":  searchQuery,
+		},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Data struct {
+			Page struct {
+				Media []Media `json:"media"`
+			} `json:"Page"`
+		} `json:"data"`
+	}
+
+	resp, err := c.do(ctx, http.MethodPost, c.baseURL, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+
+	return response.Data.Page.Media, nil
+}
+
+func (c *Client) FetchRecommendations(ctx context.Context, page, perPage, anilistId int) ([]Media, error) {
+	query := fmt.Sprintf(`query Media($page: Int, $perPage: Int, $mediaId: Int) {
+  Media(id: $mediaId) {
+    recommendations(page: $page, perPage: $perPage) {
+      nodes {
+        mediaRecommendation {
+          %s
+        }
+      }
+    }
+  }
+}`, mediaFields)
+
+	payload := map[string]any{
+		"query": query,
+		"variables": map[string]any{
+			"page":    page,
+			"perPage": perPage,
+			"mediaId": anilistId,
+		},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Data struct {
+			Media struct {
+				Recommendations struct {
+					Nodes []struct {
+						MediaRecommendation Media `json:"mediaRecommendation"`
+					} `json:"nodes"`
+				} `json:"recommendations"`
+			} `json:"Media"`
+		} `json:"data"`
+	}
+
+	resp, err := c.do(ctx, http.MethodPost, c.baseURL, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+
+	mediaRec := &response.Data.Media.Recommendations.Nodes
+	media := make([]Media, len(*mediaRec))
+	for idx, m := range *mediaRec {
+		media[idx] = m.MediaRecommendation
+	}
+
+	return media, nil
 }

@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strconv"
 	"sync"
@@ -14,10 +15,18 @@ import (
 )
 
 type Resolver interface {
-	PLuginInfo() string
+	PluginInfo() string
 	Trending(ctx context.Context, page, perPage int) ([]Media, error)
 	GetMedia(ctx context.Context, id int) (*Media, error)
 	GetEpisodes(ctx context.Context, id, page, perPage int) (*EpisodeList, error)
+	GetSources(ctx context.Context, anilistId, epNumber int) ([]Source, error)
+	// GetCurrentAiring(ctx context.Context, page, perPage int) ([]Media, error)                       // basically updates with cron from db every hour, shown in homescreen
+	Search(ctx context.Context, query string, page, perPage int) ([]Media, error) // search
+	// GetUpcomingMedia(ctx context.Context) ([]Media, error)                                          // current week
+	GetRecommendations(ctx context.Context, anilistId, page, perPage int) ([]Media, error)                       // by anilistId it generates 5 recommendations
+	GetMediaBySeason(ctx context.Context, season *anilist.SEASON, year *int, page, perPage int) ([]Media, error) // lists all anime for a season (fall/... in season year)
+	// could be merged but weird since both season and filter can work standalone and with together basically results union (A Union B)
+	GetMediaByGenre(ctx context.Context, genre []string, page, perPage int) ([]Media, error)
 }
 
 type resolver struct {
@@ -46,7 +55,7 @@ func New(db database.Service) Resolver {
 }
 
 // Returns plugin details
-func (rs *resolver) PLuginInfo() string { return "aniflux" }
+func (rs *resolver) PluginInfo() string { return "aniflux" }
 
 func (rs *resolver) Trending(ctx context.Context, page, perPage int) ([]Media, error) {
 	trendingMedia, err := rs.anilist.FetchAnilistTrending(ctx, page, perPage)
@@ -108,4 +117,120 @@ func (rs *resolver) GetEpisodes(ctx context.Context, id, page, perPage int) (*Ep
 		Episodes: utils.Paginate(episodes, page, perPage),
 		Specials: specials,
 	}, nil
+}
+
+func (rs *resolver) GetSources(ctx context.Context, anilistId, epNumber int) ([]Source, error) {
+	// 1. get anidbEid from anizip cache
+	var anizipResp *anizip.Resp
+	if cached, ok := rs.cache.Load(anilistId); ok {
+		anizipResp = cached.(*anizip.Resp)
+	} else {
+		resp, err := rs.anizip.FetchAnizipData(ctx, anizip.AnilistID, anilistId)
+		if err != nil {
+			return nil, err
+		}
+		rs.cache.Store(anilistId, resp)
+		anizipResp = resp
+	}
+
+	// 2. find anidbEid for this episode number
+	ep, ok := anizipResp.Episodes[strconv.Itoa(epNumber)]
+	if !ok {
+		return nil, fmt.Errorf("episode %d not found", epNumber)
+	}
+
+	// 3. fetch sources by anidbEid
+	src, err := rs.sources.FetchSources(ctx, ep.AniDbEid)
+	if err != nil {
+		return nil, err
+	}
+
+	episodeSources := make([]Source, len(src))
+	for idx, s := range src {
+		episodeSources[idx] = toSource(&s)
+	}
+
+	sort.Slice(episodeSources, func(i, j int) bool {
+		return episodeSources[i].Seeders > episodeSources[j].Seeders
+	})
+
+	return episodeSources, nil
+}
+
+// cache (db) - cron updates once every end of day
+// func (rs *resolver) GetCurrentAiring(ctx context.Context, page, perPage int) ([]Media, error) {
+// 	resp, err := getFromDb
+// }
+
+// always realtime - cache media entry only
+func (rs *resolver) Search(ctx context.Context, query string, page, perPage int) ([]Media, error) {
+	anilistMedia, err := rs.anilist.Search(ctx, page, perPage, query)
+	if err != nil {
+		return nil, err
+	}
+	// push to a worker to save the individual entries
+	media := make([]Media, len(anilistMedia))
+
+	for idx, m := range anilistMedia {
+		media[idx] = toMedia(m)
+	}
+
+	return media, nil
+}
+
+// cache (db) - cron updates
+// func (rs *resolver) GetUpcomingMedia(ctx context.Context) ([]Media, error) {
+
+// }
+
+// cache (mem - ttl 1hr) - fetch realtime
+func (rs *resolver) GetRecommendations(ctx context.Context, anilistId, page, perPage int) ([]Media, error) {
+	var recommendations []anilist.Media
+	if val, ok := rs.cache.Load(fmt.Sprintf("rec:%d:%d", anilistId, page)); ok {
+		recommendations = val.([]anilist.Media)
+	} else {
+		recs, err := rs.anilist.FetchRecommendations(ctx, page, perPage, anilistId)
+		if err != nil {
+			return nil, err
+		}
+		rs.cache.Store(fmt.Sprintf("rec:%d:%d", anilistId, page), recs)
+		recommendations = recs
+	}
+	var mediaRecs = make([]Media, len(recommendations))
+	for idx, rec := range recommendations {
+		mediaRecs[idx] = toMedia(rec)
+	}
+
+	return mediaRecs, nil
+}
+
+// cache (db) - build as we go
+func (rs *resolver) GetMediaBySeason(ctx context.Context, season *anilist.SEASON, year *int, page, perPage int) ([]Media, error) {
+	anilistMedia, err := rs.anilist.FetchMediaBySeason(ctx, page, perPage, season, year)
+	if err != nil {
+		return nil, err
+	}
+	media := make([]Media, len(anilistMedia))
+
+	for idx, m := range anilistMedia {
+		media[idx] = toMedia(m)
+	}
+
+	return media, nil
+}
+
+// cache (media entry only) - build as we go
+func (rs *resolver) GetMediaByGenre(ctx context.Context, genre []string, page, perPage int) ([]Media, error) {
+	anilistMedia, err := rs.anilist.FetchMediaByGenre(ctx, page, perPage, genre)
+	if err != nil {
+		return nil, err
+	}
+
+	media := make([]Media, len(anilistMedia))
+
+	for idx, m := range anilistMedia {
+		media[idx] = toMedia(m)
+	}
+
+	return media, nil
 }

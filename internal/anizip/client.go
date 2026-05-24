@@ -18,7 +18,7 @@ type Client struct {
 func New() *Client {
 	return &Client{
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: 15 * time.Second,
 		},
 		baseURL: os.Getenv("ANIZIP_URL"),
 	}
