@@ -1,10 +1,15 @@
 package resolver
 
 import (
+	"encoding/json"
+	"log"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/scythe504/aniflux/internal/anilist"
 	"github.com/scythe504/aniflux/internal/anizip"
+	"github.com/scythe504/aniflux/internal/database"
 	"github.com/scythe504/aniflux/internal/sources"
 )
 
@@ -21,7 +26,7 @@ func toMedia(m anilist.Media) Media {
 		Description:   m.Description,
 		Cover:         m.CoverImage.Large,
 		Banner:        m.BannerImage,
-		Score:         float64(m.AverageScore) / 10,
+		Score:         float64(m.AverageScore),
 		Genres:        toGenres(m.Genres),
 		Status:        toStatus(m.Status),
 		Season:        Season(m.Season),
@@ -73,9 +78,10 @@ func toEpisode(az *anizip.Episode) Episode {
 	if title == "" {
 		title = az.Title.XJAT
 	}
+
 	return Episode{
 		Id:       az.AniDbEid,
-		Number:   az.EpisodeNumber,
+		Number:   strconv.Itoa(az.EpisodeNumber),
 		Title:    title,
 		AirDate:  az.AirDateUtc,
 		Overview: az.Overview,
@@ -92,5 +98,60 @@ func toSource(s *sources.TorznabItem) Source {
 		Seeders:   s.Seeders,
 		Leechers:  s.Leechers,
 		Size:      s.Size,
+	}
+}
+
+func toAnimeRecord(m *Media) database.AnimeRecord {
+	marshaledGenres, _ := json.Marshal(m.Genres)
+
+	return database.AnimeRecord{
+		ID:            m.ID,
+		Type:          string(MediaTypeAnime),
+		Title:         m.Title,
+		OriginalTitle: m.OriginalTitle,
+		Cover:         m.Cover,
+		Banner:        m.Banner,
+		Description:   m.Description,
+		Score:         m.Score,
+		Genres:        string(marshaledGenres),
+		Status:        string(m.Status),
+		Season:        string(m.Season),
+		SeasonYear:    m.SeasonYear,
+		TotalEpisodes: m.TotalEpisodes,
+		Duration:      m.Duration,
+		NextAiringEp:  &m.NextAiring.Episode,
+		NextAiringAt:  &m.NextAiring.AiringAt,
+		UpdatedAt:     time.Now().UnixMilli(),
+		CreatedAt:     time.Now().UnixMilli(),
+	}
+}
+
+func fromAnimeRecord(ar *database.AnimeRecord) Media {
+	var genres []string
+	err := json.Unmarshal(([]byte(ar.Genres)), &genres)
+	if err != nil {
+		genres = strings.Split(ar.Genres, " ")
+		log.Println(ar.Genres)
+	}
+
+	return Media{
+		ID:            ar.ID,
+		Type:          MediaType(ar.Type),
+		Title:         ar.Title,
+		OriginalTitle: ar.OriginalTitle,
+		Cover:         ar.Cover,
+		Banner:        ar.Banner,
+		Description:   ar.Description,
+		Score:         ar.Score,
+		Genres:        genres,
+		Status:        Status(ar.Status),
+		Season:        Season(ar.Season),
+		SeasonYear:    ar.SeasonYear,
+		TotalEpisodes: ar.TotalEpisodes,
+		Duration:      ar.Duration,
+		NextAiring: &Airing{
+			Episode:  *ar.NextAiringEp,
+			AiringAt: *ar.NextAiringAt,
+		},
 	}
 }

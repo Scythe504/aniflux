@@ -21,24 +21,21 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	r.HandleFunc("/", s.HelloWorldHandler)
 
-	aniflux := r.PathPrefix("/aniflux").Subrouter()
+	r.HandleFunc("/trending", s.trendingAnime)
 
-	aniflux.HandleFunc("/trending", s.trendingAnime)
+	r.HandleFunc("/seasonal", s.getSeasonal)
 
-	aniflux.HandleFunc("/seasonal", s.getSeasonal)
+	r.HandleFunc("/search", s.searchAnime)
 
-	aniflux.HandleFunc("/search", s.searchAnime)
+	r.HandleFunc("/genre", s.getGenre)
 
-	aniflux.HandleFunc("/genre", s.getGenre)
+	r.HandleFunc("/{id}", s.getAnime)
 
-	aniflux.HandleFunc("/{id}", s.getAnime)
+	r.HandleFunc("/{id}/episodes", s.getEpisodes)
 
-	aniflux.HandleFunc("/{id}/episodes", s.getEpisodes)
+	r.HandleFunc("/{id}/episodes/{epNumber}/sources", s.getSources)
 
-	aniflux.HandleFunc("/{id}/episodes/{epNumber}/sources", s.getSources)
-
-	aniflux.HandleFunc("/{id}/recommendations", s.getRecommendations)
-
+	r.HandleFunc("/{id}/recommendations", s.getRecommendations)
 
 	return r
 }
@@ -46,11 +43,16 @@ func (s *Server) RegisterRoutes() http.Handler {
 // CORS middleware
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORS Headers
-		w.Header().Set("Access-Control-Allow-Origin", "*") // Wildcard allows all origins
+		// Dynamic CORS Origin handling
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Credentials", "false") // Credentials not allowed with wildcard origins
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-Requested-With, Origin")
 
 		// Handle preflight OPTIONS requests
 		if r.Method == http.MethodOptions {
@@ -198,6 +200,7 @@ func (s *Server) getEpisodes(w http.ResponseWriter, r *http.Request) {
 			"id":      id,
 			"page":    page,
 			"perPage": perPage,
+			"errLine": 203,
 		})
 		utils.WriteError(w, http.StatusNotFound, "Not found")
 		return
@@ -213,8 +216,8 @@ func (s *Server) getSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	epNumber, err := strconv.Atoi(mux.Vars(r)["epNumber"])
-	if err != nil {
+	epNumber := mux.Vars(r)["epNumber"]
+	if epNumber == "" {
 		utils.WriteError(w, http.StatusBadRequest, "Invalid episode number")
 		return
 	}

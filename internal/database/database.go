@@ -2,21 +2,24 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"fmt"
+	"github.com/jmoiron/sqlx"
 	"log"
 	"os"
 	"strconv"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
-	_ "modernc.org/sqlite"
 	"github.com/pressly/goose/v3"
+	_ "modernc.org/sqlite"
 )
 
 // Service represents a service that interacts with a database.
 type Service interface {
+	UpsertAnime(ctx context.Context, a AnimeRecord) error
+	GetCurrentAiring(ctx context.Context, page, perPage int) ([]AnimeRecord, error)
+
 	// Health returns a map of health status information.
 	// The keys and values in the map are service-specific.
 	Health() map[string]string
@@ -27,7 +30,7 @@ type Service interface {
 }
 
 type service struct {
-	db *sql.DB
+	db *sqlx.DB
 }
 
 var (
@@ -44,7 +47,7 @@ func New() Service {
 		return dbInstance
 	}
 
-	db, err := sql.Open("sqlite", dburl)
+	db, err := sqlx.Open("sqlite", dburl)
 	if err != nil {
 		// This will not be a connection error, but a DSN parse error or
 		// another initialization error.
@@ -68,7 +71,7 @@ func (s *service) migrate() error {
 		return err
 	}
 
-	if err := goose.Up(s.db, "migrations"); err != nil {
+	if err := goose.Up(s.db.DB, "migrations"); err != nil {
 		return err
 	}
 

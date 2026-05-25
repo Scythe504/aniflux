@@ -28,7 +28,9 @@ type Episode struct {
 	Overview              string     `json:"overview"`
 	Title                 AnidbTitle `json:"title"`
 	Image                 string     `json:"image"`
+	Episode               string     `json:"episode"`
 	AniDbEid              int        `json:"anidbEid"`
+	Length                int        `json:"length"`
 	Rating                string     `json:"rating"`
 	Summary               string     `json:"summary"`
 }
@@ -76,4 +78,3 @@ type Resp struct {
 	Images       []Image            `json:"images"`
 	Mappings     Mappings           `json:"mappings"`
 }
-

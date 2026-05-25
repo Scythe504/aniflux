@@ -4,6 +4,7 @@ go 1.25.7
 
 require (
 	github.com/gorilla/mux v1.8.1
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/pressly/goose/v3 v3.27.1
 	modernc.org/sqlite v1.49.1

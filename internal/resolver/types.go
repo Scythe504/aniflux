@@ -49,7 +49,7 @@ type Airing struct {
 
 type Episode struct {
 	Id       int    `json:"id"`
-	Number   int    `json:"number"`
+	Number   string `json:"number"`
 	Title    string `json:"title"`
 	AirDate  string `json:"air_date"`
 	Overview string `json:"overview"`
@@ -57,8 +57,9 @@ type Episode struct {
 }
 
 type EpisodeList struct {
-	Episodes []Episode `json:"episodes"`
-	Specials []Episode `json:"specials"`
+	Episodes   []Episode `json:"episodes"`
+	Specials   []Episode `json:"specials"`
+	TotalCount int       `json:"total_count"`
 }
 
 type Source struct {

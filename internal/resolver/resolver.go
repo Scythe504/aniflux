@@ -19,7 +19,7 @@ type Resolver interface {
 	Trending(ctx context.Context, page, perPage int) ([]Media, error)
 	GetMedia(ctx context.Context, id int) (*Media, error)
 	GetEpisodes(ctx context.Context, id, page, perPage int) (*EpisodeList, error)
-	GetSources(ctx context.Context, anilistId, epNumber int) ([]Source, error)
+	GetSources(ctx context.Context, anilistId int, epNumber string) ([]Source, error)
 	// GetCurrentAiring(ctx context.Context, page, perPage int) ([]Media, error)                       // basically updates with cron from db every hour, shown in homescreen
 	Search(ctx context.Context, query string, page, perPage int) ([]Media, error) // search
 	// GetUpcomingMedia(ctx context.Context) ([]Media, error)                                          // current week
@@ -86,57 +86,69 @@ func (rs *resolver) GetMedia(ctx context.Context, id int) (*Media, error) {
 func (rs *resolver) GetEpisodes(ctx context.Context, id, page, perPage int) (*EpisodeList, error) {
 	var resp *anizip.Resp
 
-	if cached, ok := rs.cache.Load(id); ok {
+	if cached, ok := rs.cache.Load(fmt.Sprintf("ep:%d", id)); ok {
 		resp = cached.(*anizip.Resp)
 	} else {
 		ep, err := rs.anizip.FetchAnizipData(ctx, anizip.AnilistID, id)
 		if err != nil {
 			return nil, err
 		}
-		rs.cache.Store(id, ep)
+		rs.cache.Store(fmt.Sprintf("ep:%d", id), ep)
 		resp = ep
 	}
 
 	episodes := make([]Episode, 0)
 	specials := make([]Episode, 0)
+
 	for key, val := range resp.Episodes {
 		ep := toEpisode(&val)
+		ep.Number = key // Explicitly inject the raw key ("6", "S1", "OP1") into the struct
+
 		if _, err := strconv.Atoi(key); err != nil {
-			// non-numeric key = special/OVA/credit/trailer
+			// Non-numeric key = special/OVA/credit/trailer
 			specials = append(specials, ep)
 		} else {
 			episodes = append(episodes, ep)
 		}
 	}
 
+	// Correctly sort numeric strings as real numbers
 	sort.Slice(episodes, func(i, j int) bool {
-		return episodes[i].Number < episodes[j].Number
+		ni, _ := strconv.Atoi(episodes[i].Number)
+		nj, _ := strconv.Atoi(episodes[j].Number)
+		return ni < nj
+	})
+
+	// Sort specials naturally (e.g. S1, S2, S11, S111)
+	sort.Slice(specials, func(i, j int) bool {
+		return utils.CompareNatural(specials[i].Number, specials[j].Number)
 	})
 
 	return &EpisodeList{
-		Episodes: utils.Paginate(episodes, page, perPage),
-		Specials: specials,
+		Episodes:   utils.Paginate(episodes, page, perPage),
+		Specials:   specials,
+		TotalCount: len(episodes),
 	}, nil
 }
 
-func (rs *resolver) GetSources(ctx context.Context, anilistId, epNumber int) ([]Source, error) {
+func (rs *resolver) GetSources(ctx context.Context, anilistId int, epNumber string) ([]Source, error) {
 	// 1. get anidbEid from anizip cache
 	var anizipResp *anizip.Resp
-	if cached, ok := rs.cache.Load(anilistId); ok {
+	if cached, ok := rs.cache.Load(fmt.Sprintf("src:%d", anilistId)); ok {
 		anizipResp = cached.(*anizip.Resp)
 	} else {
 		resp, err := rs.anizip.FetchAnizipData(ctx, anizip.AnilistID, anilistId)
 		if err != nil {
 			return nil, err
 		}
-		rs.cache.Store(anilistId, resp)
+		rs.cache.Store(fmt.Sprintf("src:%d", anilistId), resp)
 		anizipResp = resp
 	}
 
 	// 2. find anidbEid for this episode number
-	ep, ok := anizipResp.Episodes[strconv.Itoa(epNumber)]
+	ep, ok := anizipResp.Episodes[epNumber]
 	if !ok {
-		return nil, fmt.Errorf("episode %d not found", epNumber)
+		return nil, fmt.Errorf("episode %s not found", epNumber)
 	}
 
 	// 3. fetch sources by anidbEid
