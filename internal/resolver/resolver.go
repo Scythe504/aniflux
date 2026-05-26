@@ -20,9 +20,9 @@ type Resolver interface {
 	GetMedia(ctx context.Context, id int) (*Media, error)
 	GetEpisodes(ctx context.Context, id, page, perPage int) (*EpisodeList, error)
 	GetSources(ctx context.Context, anilistId int, epNumber string) ([]Source, error)
-	// GetCurrentAiring(ctx context.Context, page, perPage int) ([]Media, error)                       // basically updates with cron from db every hour, shown in homescreen
-	Search(ctx context.Context, query string, page, perPage int) ([]Media, error) // search
-	// GetUpcomingMedia(ctx context.Context) ([]Media, error)                                          // current week
+	GetAiringSchedule(ctx context.Context, page, perPage int) ([]Episode, error)                                 // basically updates with cron from db every hour, shown in homescreen
+	Search(ctx context.Context, query string, page, perPage int) ([]Media, error)                                // search
+	GetCurrentAiring(ctx context.Context, page, perPage int) ([]Media, error)                                    // current week
 	GetRecommendations(ctx context.Context, anilistId, page, perPage int) ([]Media, error)                       // by anilistId it generates 5 recommendations
 	GetMediaBySeason(ctx context.Context, season *anilist.SEASON, year *int, page, perPage int) ([]Media, error) // lists all anime for a season (fall/... in season year)
 	// could be merged but weird since both season and filter can work standalone and with together basically results union (A Union B)
@@ -170,9 +170,20 @@ func (rs *resolver) GetSources(ctx context.Context, anilistId int, epNumber stri
 }
 
 // cache (db) - cron updates once every end of day
-// func (rs *resolver) GetCurrentAiring(ctx context.Context, page, perPage int) ([]Media, error) {
-// 	resp, err := getFromDb
-// }
+func (rs *resolver) GetAiringSchedule(ctx context.Context, page, perPage int) ([]Episode, error) {
+	schedule, err := rs.db.GetWeeklySchedule()
+	if err != nil {
+		return nil, err
+	}
+
+	ep := make([]Episode, len(schedule))
+
+	for idx, s := range schedule {
+		ep[idx] = fromAiringRecord(&s)
+	}
+
+	return utils.Paginate(ep, page, perPage), nil
+}
 
 // always realtime - cache media entry only
 func (rs *resolver) Search(ctx context.Context, query string, page, perPage int) ([]Media, error) {
@@ -191,9 +202,19 @@ func (rs *resolver) Search(ctx context.Context, query string, page, perPage int)
 }
 
 // cache (db) - cron updates
-// func (rs *resolver) GetUpcomingMedia(ctx context.Context) ([]Media, error) {
+func (rs *resolver) GetCurrentAiring(ctx context.Context, page, perPage int) ([]Media, error) {
+	mediaRecords, err := rs.db.GetCurrentAiring(ctx, page, perPage)
+	if err != nil {
+		return nil, err
+	}
 
-// }
+	media := make([]Media, len(mediaRecords))
+	for idx, m := range mediaRecords {
+		media[idx] = fromAnimeRecord(&m)
+	}
+
+	return media, nil
+}
 
 // cache (mem - ttl 1hr) - fetch realtime
 func (rs *resolver) GetRecommendations(ctx context.Context, anilistId, page, perPage int) ([]Media, error) {

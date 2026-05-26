@@ -1,5 +1,4 @@
 -- +goose Up
--- +goose
 CREATE TABLE IF NOT EXISTS anime (
     id TEXT PRIMARY KEY NOT NULL,
     type TEXT NOT NULL DEFAULT 'anime',

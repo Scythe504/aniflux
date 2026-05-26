@@ -89,3 +89,12 @@ type NextAiringEpisode struct {
 	MediaId         int   `json:"mediaId"`
 	TimeUntilAiring int64 `json:"timeUntilAiring"`
 }
+
+type AiringSchedule struct {
+	ID              int   `json:"id"`
+	TimeUntilAiring int64 `json:"timeUntilAiring"`
+	AiringAt        int64 `json:"airingAt"`
+	Episode         int   `json:"episode"`
+	Media           Media `json:"media"`
+}
+

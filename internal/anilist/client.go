@@ -353,3 +353,55 @@ func (c *Client) FetchRecommendations(ctx context.Context, page, perPage, anilis
 
 	return media, nil
 }
+
+func (c *Client) FetchAiringSchedule(ctx context.Context, page int, perPage int, airingAtLesser int, airingAtGreater int) ([]AiringSchedule, error) {
+	query := fmt.Sprintf(`query AiringSchedule($page: Int, $perPage: Int, $airingAtLesser: Int, $airingAtGreater: Int) {
+		Page(page: $page, perPage: $perPage) {
+			airingSchedules(sort: [TIME_DESC], airingAt_lesser: $airingAtLesser, airingAt_greater: $airingAtGreater) {
+				id
+				timeUntilAiring
+				airingAt
+				episode
+				media {
+					%s
+				}
+			}
+		}
+	}`, mediaFields)
+
+	payload := map[string]any{
+		"query": query,
+		"variables": map[string]any{
+			"page":            page,
+			"perPage":         perPage,
+			"airingAtLesser":  airingAtLesser,
+			"airingAtGreater": airingAtGreater,
+		},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do(ctx, http.MethodPost, c.baseURL, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var response struct {
+		Data struct {
+			Page struct {
+				AiringSchedules []AiringSchedule `json:"airingSchedules"`
+			} `json:"Page"`
+		} `json:"data"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+
+	return response.Data.Page.AiringSchedules, nil
+}
+

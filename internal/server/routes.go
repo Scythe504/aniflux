@@ -29,6 +29,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	r.HandleFunc("/genre", s.getGenre)
 
+	r.HandleFunc("/airing", s.getCurrentAiring)
+
+	r.HandleFunc("/schedule", s.getSchedule)
+
 	r.HandleFunc("/{id}", s.getAnime)
 
 	r.HandleFunc("/{id}/episodes", s.getEpisodes)
@@ -287,6 +291,46 @@ func (s *Server) getGenre(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.WriteJSON(w, http.StatusOK, media)
+}
+
+func (s *Server) getCurrentAiring(w http.ResponseWriter, r *http.Request) {
+	page, perPage, err := getPageParams(r, 1, 24)
+	if err != nil {
+		utils.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	airingMedia, err := s.rs.GetCurrentAiring(r.Context(), page, perPage)
+	if err != nil {
+		utils.LogHandlerError(r, "GetCurrentAiring", err, map[string]any{
+			"page":    page,
+			"perPage": perPage,
+		})
+		utils.WriteError(w, http.StatusNotFound, "Not found")
+		return
+	}
+
+	utils.WriteJSON(w, http.StatusOK, airingMedia)
+}
+
+func (s *Server) getSchedule(w http.ResponseWriter, r *http.Request) {
+	page, perPage, err := getPageParams(r, 1, 24)
+	if err != nil {
+		utils.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	schedule, err := s.rs.GetAiringSchedule(r.Context(), page, perPage)
+	if err != nil {
+		utils.LogHandlerError(r, "GetSchedule", err, map[string]any{
+			"page":    page,
+			"perPage": perPage,
+		})
+		utils.WriteError(w, http.StatusNotFound, "Not found")
+		return
+	}
+
+	utils.WriteJSON(w, http.StatusOK, schedule)
 }
 
 func getPageParams(r *http.Request, defaultPage, defaultPerPage int) (int, int, error) {

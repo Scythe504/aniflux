@@ -28,6 +28,60 @@ type AnimeRecord struct {
 	CreatedAt     int64   `db:"created_at"`
 }
 
+type AiringRecord struct {
+	ID              int    `db:"id"`
+	AnimeID         string `db:"anime_id"`
+	Episode         int    `db:"episode"`
+	AiringAt        int64  `db:"airing_at"`
+	TimeUntilAiring int64  `db:"time_until_airing"`
+	UpdatedAt       int64  `db:"updated_at"`
+	Title           string `db:"title"`
+	OriginalTitle   string `db:"original_title"`
+	Cover           string `db:"cover"`
+}
+
+func (s *service) UpsertAiringSchedule(a AiringRecord) error {
+	_, err := s.db.Exec(`
+        INSERT INTO airing_schedule (anime_id, episode, airing_at, time_until_airing, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(anime_id, episode) DO UPDATE SET
+            airing_at = excluded.airing_at,
+            time_until_airing = excluded.time_until_airing,
+            updated_at = excluded.updated_at
+    `, a.AnimeID, a.Episode, a.AiringAt, a.TimeUntilAiring, time.Now().UnixMilli())
+	if err != nil {
+		return fmt.Errorf("failed to upsert airing schedule: %w", err)
+	}
+	return nil
+}
+
+func (s *service) GetWeeklySchedule() ([]AiringRecord, error) {
+	now := time.Now().Unix()
+	weekEnd := now + (7 * 24 * 60 * 60)
+
+	var results []AiringRecord
+	err := s.db.Select(&results, `
+        SELECT 
+            asch.id,
+            asch.anime_id,
+            asch.episode,
+            asch.airing_at,
+            asch.time_until_airing,
+            asch.updated_at,
+            COALESCE(a.title, '') AS title,
+            COALESCE(a.original_title, '') AS original_title,
+            COALESCE(a.cover, '') AS cover
+        FROM airing_schedule asch
+        LEFT JOIN anime a ON asch.anime_id = a.id
+        WHERE asch.airing_at BETWEEN ? AND ?
+        ORDER BY asch.airing_at ASC
+    `, now, weekEnd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get weekly schedule: %w", err)
+	}
+	return results, nil
+}
+
 func (s *service) UpsertAnime(ctx context.Context, a AnimeRecord) error {
 	genres, err := json.Marshal(a.Genres)
 	if err != nil {
@@ -74,7 +128,11 @@ func (s *service) UpsertAnime(ctx context.Context, a AnimeRecord) error {
 func (s *service) GetCurrentAiring(ctx context.Context, page, perPage int) ([]AnimeRecord, error) {
 	var results []AnimeRecord
 	err := s.db.SelectContext(ctx, &results, `
-        SELECT * FROM anime
+        SELECT 
+            id, type, title, original_title, cover, banner, description,
+            score, genres, status, season, season_year, total_episodes,
+            duration, next_airing_episode, next_airing_at, updated_at, created_at
+        FROM anime
         WHERE status = 'RELEASING'
         ORDER BY updated_at DESC
         LIMIT ? OFFSET ?

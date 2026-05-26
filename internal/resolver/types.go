@@ -51,7 +51,7 @@ type Episode struct {
 	Id       int    `json:"id"`
 	Number   string `json:"number"`
 	Title    string `json:"title"`
-	AirDate  string `json:"air_date"`
+	AirDate  int64  `json:"air_date"`
 	Overview string `json:"overview"`
 	Image    string `json:"image"`
 }

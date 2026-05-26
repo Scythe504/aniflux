@@ -19,6 +19,8 @@ import (
 type Service interface {
 	UpsertAnime(ctx context.Context, a AnimeRecord) error
 	GetCurrentAiring(ctx context.Context, page, perPage int) ([]AnimeRecord, error)
+	GetWeeklySchedule() ([]AiringRecord, error)
+	UpsertAiringSchedule(a AiringRecord) error
 
 	// Health returns a map of health status information.
 	// The keys and values in the map are service-specific.

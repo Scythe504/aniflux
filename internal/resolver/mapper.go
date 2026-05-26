@@ -83,7 +83,7 @@ func toEpisode(az *anizip.Episode) Episode {
 		Id:       az.AniDbEid,
 		Number:   strconv.Itoa(az.EpisodeNumber),
 		Title:    title,
-		AirDate:  az.AirDateUtc,
+		AirDate:  parseAirDate(az.AirDateUtc),
 		Overview: az.Overview,
 		Image:    az.Image,
 	}
@@ -154,4 +154,42 @@ func fromAnimeRecord(ar *database.AnimeRecord) Media {
 			AiringAt: *ar.NextAiringAt,
 		},
 	}
+}
+
+func fromAiringRecord(ar *database.AiringRecord) Episode {
+	title := ar.Title
+	if title == "" {
+		title = ar.OriginalTitle
+	}
+	animeIDInt, _ := strconv.Atoi(ar.AnimeID)
+	return Episode{
+		Id:       animeIDInt,
+		Number:   strconv.Itoa(ar.Episode),
+		Title:    title,
+		AirDate:  ar.AiringAt * 1000,
+		Overview: "",
+		Image:    ar.Cover,
+	}
+}
+
+func parseAirDate(dateStr string) int64 {
+	if dateStr == "" {
+		return 0
+	}
+	// Try parsing RFC3339 format (e.g. 2024-05-26T15:30:00Z)
+	t, err := time.Parse(time.RFC3339, dateStr)
+	if err == nil {
+		return t.UnixMilli()
+	}
+	// Try parsing "2006-01-02" date format
+	t, err = time.Parse("2006-01-02", dateStr)
+	if err == nil {
+		return t.UnixMilli()
+	}
+	// Try parsing "2006-01-02 15:04:05" layout
+	t, err = time.Parse("2006-01-02 15:04:05", dateStr)
+	if err == nil {
+		return t.UnixMilli()
+	}
+	return 0
 }
