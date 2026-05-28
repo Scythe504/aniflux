@@ -33,3 +33,5 @@ main
 .DS_Store
 
 data
+.antigravitycli
+run_worker.sh

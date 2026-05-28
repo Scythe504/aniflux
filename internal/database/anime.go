@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -82,11 +81,52 @@ func (s *service) GetWeeklySchedule() ([]AiringRecord, error) {
 	return results, nil
 }
 
+// UpsertAnime inserts a new anime record or updates key fields on conflict.
+// The updated_at field is only bumped when the next_airing_at progresses (indicating
+// a new episode has broadcasted), setting it to the broadcast time of the aired episode.
 func (s *service) UpsertAnime(ctx context.Context, a AnimeRecord) error {
-	genres, err := json.Marshal(a.Genres)
+	stmt := `
+		INSERT INTO anime (
+			id, type, title, original_title, cover, banner, description,
+			score, genres, status, season, season_year, total_episodes,
+			duration, next_airing_episode, next_airing_at, updated_at, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			cover = excluded.cover,
+			banner = excluded.banner,
+			score = excluded.score,
+			status = excluded.status,
+			total_episodes = excluded.total_episodes,
+			next_airing_episode = excluded.next_airing_episode,
+			next_airing_at = excluded.next_airing_at,
+			updated_at = CASE 
+				WHEN anime.next_airing_at IS NULL THEN excluded.updated_at
+				WHEN excluded.next_airing_at IS NULL THEN anime.next_airing_at * 1000
+				WHEN excluded.next_airing_at > anime.next_airing_at THEN anime.next_airing_at * 1000
+				ELSE anime.updated_at 
+			END
+	`
+
+	_, err := s.db.ExecContext(ctx, stmt,
+		a.ID, a.Type, a.Title, a.OriginalTitle, a.Cover, a.Banner, a.Description,
+		a.Score, a.Genres, a.Status, a.Season, a.SeasonYear, a.TotalEpisodes,
+		a.Duration, a.NextAiringEp, a.NextAiringAt,
+		time.Now().UnixMilli(), time.Now().UnixMilli(),
+	)
 	if err != nil {
-		return fmt.Errorf("failed to marshal genres: %w", err)
+		return fmt.Errorf("failed to upsert anime: %w", err)
 	}
+
+	return nil
+}
+
+// BulkUpsertAnime updates or inserts multiple anime records inside a database transaction.
+func (s *service) BulkUpsertAnime(ctx context.Context, records []AnimeRecord) error {
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
 
 	stmt := `
 		INSERT INTO anime (
@@ -95,31 +135,35 @@ func (s *service) UpsertAnime(ctx context.Context, a AnimeRecord) error {
 			duration, next_airing_episode, next_airing_at, updated_at, created_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			title = excluded.title,
-			original_title = excluded.original_title,
 			cover = excluded.cover,
 			banner = excluded.banner,
-			description = excluded.description,
 			score = excluded.score,
-			genres = excluded.genres,
 			status = excluded.status,
-			season = excluded.season,
-			season_year = excluded.season_year,
 			total_episodes = excluded.total_episodes,
-			duration = excluded.duration,
 			next_airing_episode = excluded.next_airing_episode,
 			next_airing_at = excluded.next_airing_at,
-			updated_at = excluded.updated_at
+			updated_at = CASE 
+				WHEN anime.next_airing_at IS NULL THEN excluded.updated_at
+				WHEN excluded.next_airing_at IS NULL THEN anime.next_airing_at * 1000
+				WHEN excluded.next_airing_at > anime.next_airing_at THEN anime.next_airing_at * 1000
+				ELSE anime.updated_at 
+			END
 	`
 
-	_, err = s.db.ExecContext(ctx, stmt,
-		a.ID, a.Type, a.Title, a.OriginalTitle, a.Cover, a.Banner, a.Description,
-		a.Score, string(genres), a.Status, a.Season, a.SeasonYear, a.TotalEpisodes,
-		a.Duration, a.NextAiringEp, a.NextAiringAt,
-		time.Now().UnixMilli(), time.Now().UnixMilli(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to upsert anime: %w", err)
+	for _, a := range records {
+		_, err = tx.ExecContext(ctx, stmt,
+			a.ID, a.Type, a.Title, a.OriginalTitle, a.Cover, a.Banner, a.Description,
+			a.Score, a.Genres, a.Status, a.Season, a.SeasonYear, a.TotalEpisodes,
+			a.Duration, a.NextAiringEp, a.NextAiringAt,
+			time.Now().UnixMilli(), time.Now().UnixMilli(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to execute insert for anime %s: %w", a.ID, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil

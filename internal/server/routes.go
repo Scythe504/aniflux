@@ -19,27 +19,19 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// Apply CORS middleware
 	r.Use(s.corsMiddleware)
 
-	r.HandleFunc("/", s.HelloWorldHandler)
+	api := r.PathPrefix("/api").Subrouter()
 
-	r.HandleFunc("/trending", s.trendingAnime)
-
-	r.HandleFunc("/seasonal", s.getSeasonal)
-
-	r.HandleFunc("/search", s.searchAnime)
-
-	r.HandleFunc("/genre", s.getGenre)
-
-	r.HandleFunc("/airing", s.getCurrentAiring)
-
-	r.HandleFunc("/schedule", s.getSchedule)
-
-	r.HandleFunc("/{id}", s.getAnime)
-
-	r.HandleFunc("/{id}/episodes", s.getEpisodes)
-
-	r.HandleFunc("/{id}/episodes/{epNumber}/sources", s.getSources)
-
-	r.HandleFunc("/{id}/recommendations", s.getRecommendations)
+	api.HandleFunc("/", s.HelloWorldHandler)
+	api.HandleFunc("/trending", s.trendingAnime)
+	api.HandleFunc("/seasonal", s.getSeasonal)
+	api.HandleFunc("/search", s.searchAnime)
+	api.HandleFunc("/genre", s.getGenre)
+	api.HandleFunc("/airing", s.getCurrentAiring)
+	api.HandleFunc("/schedule", s.getSchedule)
+	api.HandleFunc("/{id}", s.getAnime)
+	api.HandleFunc("/{id}/episodes", s.getEpisodes)
+	api.HandleFunc("/{id}/episodes/{epNumber}/sources", s.getSources)
+	api.HandleFunc("/{id}/recommendations", s.getRecommendations)
 
 	return r
 }
@@ -297,6 +289,10 @@ func (s *Server) getCurrentAiring(w http.ResponseWriter, r *http.Request) {
 	page, perPage, err := getPageParams(r, 1, 24)
 	if err != nil {
 		utils.WriteError(w, http.StatusBadRequest, err.Error())
+		utils.LogHandlerError(r, "GetCurrentAiring", err, map[string]any{
+			"page": page,
+			"perPage": perPage,
+		})
 		return
 	}
 
@@ -305,6 +301,7 @@ func (s *Server) getCurrentAiring(w http.ResponseWriter, r *http.Request) {
 		utils.LogHandlerError(r, "GetCurrentAiring", err, map[string]any{
 			"page":    page,
 			"perPage": perPage,
+			"airingMedia": airingMedia,
 		})
 		utils.WriteError(w, http.StatusNotFound, "Not found")
 		return

@@ -18,6 +18,7 @@ import (
 // Service represents a service that interacts with a database.
 type Service interface {
 	UpsertAnime(ctx context.Context, a AnimeRecord) error
+	BulkUpsertAnime(ctx context.Context, records []AnimeRecord) error
 	GetCurrentAiring(ctx context.Context, page, perPage int) ([]AnimeRecord, error)
 	GetWeeklySchedule() ([]AiringRecord, error)
 	UpsertAiringSchedule(a AiringRecord) error

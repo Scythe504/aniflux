@@ -104,6 +104,13 @@ func toSource(s *sources.TorznabItem) Source {
 func toAnimeRecord(m *Media) database.AnimeRecord {
 	marshaledGenres, _ := json.Marshal(m.Genres)
 
+	var nextAiringEp *int
+	var nextAiringAt *int64
+	if m.NextAiring != nil {
+		nextAiringEp = &m.NextAiring.Episode
+		nextAiringAt = &m.NextAiring.AiringAt
+	}
+
 	return database.AnimeRecord{
 		ID:            m.ID,
 		Type:          string(MediaTypeAnime),
@@ -119,8 +126,8 @@ func toAnimeRecord(m *Media) database.AnimeRecord {
 		SeasonYear:    m.SeasonYear,
 		TotalEpisodes: m.TotalEpisodes,
 		Duration:      m.Duration,
-		NextAiringEp:  &m.NextAiring.Episode,
-		NextAiringAt:  &m.NextAiring.AiringAt,
+		NextAiringEp:  nextAiringEp,
+		NextAiringAt:  nextAiringAt,
 		UpdatedAt:     time.Now().UnixMilli(),
 		CreatedAt:     time.Now().UnixMilli(),
 	}
@@ -128,10 +135,27 @@ func toAnimeRecord(m *Media) database.AnimeRecord {
 
 func fromAnimeRecord(ar *database.AnimeRecord) Media {
 	var genres []string
-	err := json.Unmarshal(([]byte(ar.Genres)), &genres)
+	err := json.Unmarshal([]byte(ar.Genres), &genres)
 	if err != nil {
-		genres = strings.Split(ar.Genres, " ")
-		log.Println(ar.Genres)
+		// Attempt to recover double-marshaled JSON string
+		var rawString string
+		if json.Unmarshal([]byte(ar.Genres), &rawString) == nil {
+			if json.Unmarshal([]byte(rawString), &genres) == nil {
+				err = nil
+			}
+		}
+		if err != nil {
+			genres = strings.Split(ar.Genres, " ")
+			log.Println("Failed to unmarshal genres:", ar.Genres)
+		}
+	}
+
+	var nextAiring *Airing
+	if ar.NextAiringEp != nil && ar.NextAiringAt != nil {
+		nextAiring = &Airing{
+			Episode:  *ar.NextAiringEp,
+			AiringAt: *ar.NextAiringAt,
+		}
 	}
 
 	return Media{
@@ -149,10 +173,7 @@ func fromAnimeRecord(ar *database.AnimeRecord) Media {
 		SeasonYear:    ar.SeasonYear,
 		TotalEpisodes: ar.TotalEpisodes,
 		Duration:      ar.Duration,
-		NextAiring: &Airing{
-			Episode:  *ar.NextAiringEp,
-			AiringAt: *ar.NextAiringAt,
-		},
+		NextAiring:    nextAiring,
 	}
 }
 

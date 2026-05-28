@@ -257,7 +257,7 @@ func (c *Client) FetchMediaByGenre(ctx context.Context, page int, perPage int, g
 func (c *Client) Search(ctx context.Context, page, perPage int, searchQuery string) ([]Media, error) {
 	query := fmt.Sprintf(`query Query($page: Int, $perPage: Int, $search: String) {
 		Page(page: $page, perPage: $perPage) {
-			media(search: $search) {
+			media(search: $search, type: ANIME) {
 			%s
 			}
 		}
@@ -299,7 +299,7 @@ func (c *Client) Search(ctx context.Context, page, perPage int, searchQuery stri
 
 func (c *Client) FetchRecommendations(ctx context.Context, page, perPage, anilistId int) ([]Media, error) {
 	query := fmt.Sprintf(`query Media($page: Int, $perPage: Int, $mediaId: Int) {
-  Media(id: $mediaId) {
+  Media(id: $mediaId, type: ANIME) {
     recommendations(page: $page, perPage: $perPage) {
       nodes {
         mediaRecommendation {
