@@ -37,9 +37,8 @@ type WorkerResult struct {
 }
 
 func main() {
-	log.Println("Starting AniFlux Kronos Worker...")
-
 	// Read JSON payload from Stdin until EOF
+	log.SetOutput(os.Stderr)
 	payloadBytes, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to read from stdin: %v\n", err)
