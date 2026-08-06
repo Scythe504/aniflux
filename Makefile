@@ -1,43 +1,34 @@
-# Simple Makefile for a Go project
+# AniFlux Worker & API Makefile
 
-# Build the application
-all: build test
+all: build-worker test
 
-build:
-	@echo "Building..."
-	
-	
-	@go build -o main cmd/api/main.go
+# Pre-build setup step (DB migrations / seeding)
+prebuild:
+	@echo "Running pre-build tasks & environment check..."
+	@go mod download
 
-# Run the application
-run:
-	@go run cmd/api/main.go
+# Build the AniFlux Worker binary
+build-worker:
+	@echo "Building AniFlux Worker binary..."
+	@go build -o bin/worker cmd/worker/main.go
+
+# Build the API binary
+build-api:
+	@echo "Building AniFlux API binary..."
+	@go build -o bin/api cmd/api/main.go
+
+# Run the compiled worker executable directly (accepting JSON payload on Stdin)
+run-worker:
+	@./bin/worker
 
 # Test the application
 test:
 	@echo "Testing..."
 	@go test ./... -v
 
-# Clean the binary
+# Clean binaries
 clean:
 	@echo "Cleaning..."
-	@rm -f main
+	@rm -rf bin/ main
 
-# Live Reload
-watch:
-	@if command -v air > /dev/null; then \
-            air; \
-            echo "Watching...";\
-        else \
-            read -p "Go's 'air' is not installed on your machine. Do you want to install it? [Y/n] " choice; \
-            if [ "$$choice" != "n" ] && [ "$$choice" != "N" ]; then \
-                go install github.com/air-verse/air@latest; \
-                air; \
-                echo "Watching...";\
-            else \
-                echo "You chose not to install air. Exiting..."; \
-                exit 1; \
-            fi; \
-        fi
-
-.PHONY: all build run test clean watch
+.PHONY: all prebuild build-worker build-api run-worker test clean

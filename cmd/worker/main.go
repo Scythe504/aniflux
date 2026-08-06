@@ -30,8 +30,14 @@ type Payload struct {
 	SeasonYear int      `json:"season_year"`
 }
 
+type WorkerResult struct {
+	Success bool   `json:"success"`
+	Task    string `json:"task_type"`
+	Message string `json:"message"`
+}
+
 func main() {
-	log.Println("Starting AniFlux Worker...")
+	log.Println("Starting AniFlux Kronos Worker...")
 
 	// Read JSON payload from Stdin until EOF
 	payloadBytes, err := io.ReadAll(os.Stdin)
@@ -40,11 +46,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Parse the payload
 	var p Payload
-	if err := json.Unmarshal(payloadBytes, &p); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to parse payload JSON: %v\n", err)
-		os.Exit(1)
+	if len(payloadBytes) > 0 {
+		if err := json.Unmarshal(payloadBytes, &p); err != nil {
+			log.Printf("Warning: payload unmarshal error (%v), falling back to default schedule task\n", err)
+		}
+	}
+
+	// Default to schedule indexing if task_type is unassigned
+	if p.TaskType == "" {
+		p.TaskType = TaskScheduleIndex
 	}
 
 	log.Printf("Executing task %s (ID: %s)\n", p.TaskType, p.TaskId)
@@ -76,12 +87,19 @@ func main() {
 		err = fmt.Errorf("unknown task type: %s", p.TaskType)
 	}
 
-	// Exit with appropriate code
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Task failed with error: %v\n", err)
 		os.Exit(1)
 	}
 
+	result := WorkerResult{
+		Success: true,
+		Task:    string(p.TaskType),
+		Message: "AniFlux indexing completed successfully",
+	}
+
+	out, _ := json.Marshal(result)
+	fmt.Println(string(out))
 	log.Println("Task finished successfully.")
 	os.Exit(0)
 }

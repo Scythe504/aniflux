@@ -80,7 +80,7 @@ func (c *Client) do(ctx context.Context, method, url string, body io.Reader) (*h
 
 func (c *Client) FetchAnilistMedia(ctx context.Context, id int) (*Media, error) {
 	query := fmt.Sprintf(`query Media($id: Int) {
-		Media(id: $id, type: ANIME) {
+		Media(id: $id, type: ANIME, genre_not_in: ["hentai"]) {
 			%s
 		}
 	}`, mediaFields)
@@ -119,7 +119,7 @@ func (c *Client) FetchAnilistMedia(ctx context.Context, id int) (*Media, error) 
 func (c *Client) FetchAnilistTrending(ctx context.Context, page int, perPage int) ([]Media, error) {
 	query := fmt.Sprintf(`query($page: Int, $perPage: Int) {
 		Page(page: $page, perPage: $perPage) {
-			media(type: ANIME, sort: [TRENDING_DESC]) {
+			media(type: ANIME, sort: [TRENDING_DESC], genre_not_in: ["hentai"]) {
 				%s
 			}
 		}
@@ -161,7 +161,7 @@ func (c *Client) FetchAnilistTrending(ctx context.Context, page int, perPage int
 func (c *Client) FetchMediaBySeason(ctx context.Context, page int, perPage int, season *SEASON, year *int) ([]Media, error) {
 	query := fmt.Sprintf(`query($page: Int, $perPage: Int, $season: MediaSeason, $seasonYear: Int) {
   Page(page: $page, perPage: $perPage) {
-    	media(type: ANIME, season: $season, seasonYear: $seasonYear) {
+    	media(type: ANIME, season: $season, seasonYear: $seasonYear, genre_not_in: ["hentai"]) {
       	%s
     	}
   	}
@@ -257,7 +257,7 @@ func (c *Client) FetchMediaByGenre(ctx context.Context, page int, perPage int, g
 func (c *Client) Search(ctx context.Context, page, perPage int, searchQuery string) ([]Media, error) {
 	query := fmt.Sprintf(`query Query($page: Int, $perPage: Int, $search: String) {
 		Page(page: $page, perPage: $perPage) {
-			media(search: $search, type: ANIME) {
+			media(search: $search, type: ANIME, genre_not_in: ["hentai"]) {
 			%s
 			}
 		}
