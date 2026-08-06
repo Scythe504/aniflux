@@ -1,6 +1,6 @@
 module github.com/scythe504/aniflux
 
-go 1.25.7
+go 1.22
 
 require (
 	github.com/gorilla/mux v1.8.1
