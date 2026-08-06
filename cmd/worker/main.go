@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
@@ -14,91 +14,109 @@ import (
 	"github.com/scythe504/aniflux/internal/indexer"
 )
 
-type TaskType string
+type WorkerPayload struct {
+	TaskID  string          `json:"task_id"`
+	Slug    string          `json:"slug"`
+	Payload json.RawMessage `json:"payload"`
+}
 
-const (
-	TaskScheduleIndex TaskType = "aniflux_schedule"
-	TaskSeasonIndex   TaskType = "aniflux_season"
-	TaskMediaUpsert   TaskType = "aniflux_media_upsert"
-)
-
-type Payload struct {
-	TaskId     string   `json:"task_id"`
-	TaskType   TaskType `json:"task_type"`
-	AnilistId  int      `json:"anilist_id"`
-	Season     string   `json:"season"`
-	SeasonYear int      `json:"season_year"`
+type TaskParams struct {
+	TaskType   string `json:"task_type"`
+	AnilistID  int    `json:"anilist_id"`
+	Season     string `json:"season"`
+	SeasonYear int    `json:"season_year"`
 }
 
 type WorkerResult struct {
-	Success bool   `json:"success"`
-	Task    string `json:"task_type"`
-	Message string `json:"message"`
+	TaskID        string          `json:"task_id"`
+	ResultMessage string          `json:"result_message"` // "ack", "success", "failed"
+	Error         json.RawMessage `json:"error,omitempty"`
+	Output        json.RawMessage `json:"output,omitempty"`
+}
+
+func writeResult(res WorkerResult) {
+	data, _ := json.Marshal(res)
+	fmt.Println(string(data))
 }
 
 func main() {
-	// Read JSON payload from Stdin until EOF
 	log.SetOutput(os.Stderr)
-	payloadBytes, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to read from stdin: %v\n", err)
-		os.Exit(1)
-	}
+	log.Println("Starting AniFlux Kronos Worker...")
 
-	var p Payload
-	if len(payloadBytes) > 0 {
-		if err := json.Unmarshal(payloadBytes, &p); err != nil {
-			log.Printf("Warning: payload unmarshal error (%v), falling back to default schedule task\n", err)
-		}
-	}
-
-	// Default to schedule indexing if task_type is unassigned
-	if p.TaskType == "" {
-		p.TaskType = TaskScheduleIndex
-	}
-
-	log.Printf("Executing task %s (ID: %s)\n", p.TaskType, p.TaskId)
-
-	// Initialize connections and clients
 	db := database.New()
 	defer db.Close()
-
 	client := anilist.New()
-	ctx := context.Background()
 
-	// Dispatch by TaskType
-	switch p.TaskType {
-	case TaskScheduleIndex:
-		err = indexer.UpdateWeeklySchedule(ctx, db, client)
-	case TaskSeasonIndex:
-		if p.Season == "" || p.SeasonYear == 0 {
-			err = fmt.Errorf("season and season_year are required for %s", TaskSeasonIndex)
-		} else {
-			err = indexer.UpdateSeasonalMedia(ctx, db, client, p.Season, p.SeasonYear)
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
 		}
-	case TaskMediaUpsert:
-		if p.AnilistId == 0 {
-			err = fmt.Errorf("anilist_id is required for %s", TaskMediaUpsert)
-		} else {
-			err = indexer.UpdateMediaEntry(ctx, db, client, p.AnilistId)
+
+		var wp WorkerPayload
+		if err := json.Unmarshal(line, &wp); err != nil {
+			log.Printf("Failed to unmarshal worker payload: %v", err)
+			continue
 		}
-	default:
-		err = fmt.Errorf("unknown task type: %s", p.TaskType)
-	}
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Task failed with error: %v\n", err)
-		os.Exit(1)
-	}
+		// 1. Send immediate ACK back over os.Stdout
+		writeResult(WorkerResult{
+			TaskID:        wp.TaskID,
+			ResultMessage: "ack",
+		})
 
-	result := WorkerResult{
-		Success: true,
-		Task:    string(p.TaskType),
-		Message: "AniFlux indexing completed successfully",
-	}
+		// 2. Process task
+		ctx := context.Background()
+		var params TaskParams
+		if len(wp.Payload) > 0 {
+			_ = json.Unmarshal(wp.Payload, &params)
+		}
 
-	out, _ := json.Marshal(result)
-	fmt.Println(string(out))
-	log.Println("Task finished successfully.")
-	os.Exit(0)
+		taskType := params.TaskType
+		if taskType == "" {
+			taskType = wp.Slug
+		}
+		if taskType == "" || taskType == "aniflux" {
+			taskType = "aniflux_schedule"
+		}
+
+		log.Printf("Executing task %s (ID: %s)\n", taskType, wp.TaskID)
+
+		var err error
+		switch taskType {
+		case "aniflux_schedule":
+			err = indexer.UpdateWeeklySchedule(ctx, db, client)
+		case "aniflux_season":
+			if params.Season == "" || params.SeasonYear == 0 {
+				err = fmt.Errorf("season and season_year required for aniflux_season")
+			} else {
+				err = indexer.UpdateSeasonalMedia(ctx, db, client, params.Season, params.SeasonYear)
+			}
+		case "aniflux_media_upsert":
+			if params.AnilistID == 0 {
+				err = fmt.Errorf("anilist_id required for aniflux_media_upsert")
+			} else {
+				err = indexer.UpdateMediaEntry(ctx, db, client, params.AnilistID)
+			}
+		default:
+			err = fmt.Errorf("unknown task type: %s", taskType)
+		}
+
+		if err != nil {
+			log.Printf("Task %s failed: %v", wp.TaskID, err)
+			errBytes, _ := json.Marshal(map[string]string{"error": err.Error()})
+			writeResult(WorkerResult{
+				TaskID:        wp.TaskID,
+				ResultMessage: "failed",
+				Error:         errBytes,
+			})
+		} else {
+			log.Printf("Task %s completed successfully", wp.TaskID)
+			writeResult(WorkerResult{
+				TaskID:        wp.TaskID,
+				ResultMessage: "success",
+			})
+		}
+	}
 }
