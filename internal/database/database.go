@@ -7,6 +7,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -53,6 +54,12 @@ func New() Service {
 	url := os.Getenv("BLUEPRINT_DB_URL")
 	if url == "" {
 		url = "./data/aniflux.db"
+	}
+
+	// Ensure parent directory exists for SQLite db file
+	dir := filepath.Dir(url)
+	if dir != "" && dir != "." {
+		_ = os.MkdirAll(dir, 0755)
 	}
 
 	db, err := sqlx.Open("sqlite", url)
