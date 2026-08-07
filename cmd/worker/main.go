@@ -85,7 +85,7 @@ func main() {
 
 		var err error
 		switch taskType {
-		case "aniflux_schedule":
+		case "aniflux_schedule", "aniflux-release-check":
 			err = indexer.UpdateWeeklySchedule(ctx, db, client)
 		case "aniflux_season":
 			if params.Season == "" || params.SeasonYear == 0 {
