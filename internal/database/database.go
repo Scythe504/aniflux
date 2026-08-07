@@ -50,7 +50,12 @@ func New() Service {
 		return dbInstance
 	}
 
-	db, err := sqlx.Open("sqlite", dburl)
+	url := os.Getenv("BLUEPRINT_DB_URL")
+	if url == "" {
+		url = "./data/aniflux.db"
+	}
+
+	db, err := sqlx.Open("sqlite", url)
 	if err != nil {
 		// This will not be a connection error, but a DSN parse error or
 		// another initialization error.

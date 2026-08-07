@@ -17,11 +17,15 @@ type Client struct {
 }
 
 func New() *Client {
+	baseURL := os.Getenv("ANILIST_URL")
+	if baseURL == "" {
+		baseURL = "https://graphql.anilist.co"
+	}
 	return &Client{
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
-		baseURL: os.Getenv("ANILIST_URL"),
+		baseURL: baseURL,
 	}
 }
 
