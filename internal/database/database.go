@@ -69,6 +69,7 @@ func New() Service {
 
 func (s *service) migrate() error {
 	goose.SetBaseFS(embedMigrations)
+	goose.SetLogger(log.New(os.Stderr, "", log.LstdFlags))
 
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return err
