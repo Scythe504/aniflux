@@ -1,0 +1,29 @@
+# Stage 1: Build the Go binary
+FROM golang:1.25.7-alpine AS builder
+
+# Install SSL certificates so that HTTPS requests succeed in the final scratch container
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+# Copy dependency files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the source code
+COPY . .
+
+# Build the statically linked Go binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o worker cmd/worker/main.go
+
+# Stage 2: Final minimal image
+FROM scratch
+
+# Copy SSL certificates
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy the statically compiled binary
+COPY --from=builder /app/worker /worker
+
+# Run the binary
+ENTRYPOINT ["/worker"]
