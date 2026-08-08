@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS anime (
     total_episodes INTEGER,
     duration INTEGER,
     next_airing_episode INTEGER,
-    next_airing_at INTEGER,
-    updated_at INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
+    next_airing_at BIGINT,
+    updated_at BIGINT NOT NULL,
+    created_at BIGINT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_anime_status ON anime(status);

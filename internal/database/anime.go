@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/scythe504/aniflux/internal/utils"
 )
 
 type AnimeRecord struct {
@@ -37,17 +39,24 @@ type AiringRecord struct {
 	Title           string `db:"title"`
 	OriginalTitle   string `db:"original_title"`
 	Cover           string `db:"cover"`
+	ScheduleDay     string `db:"schedule_day"`
+	Timing          string `db:"timing"`
 }
 
 func (s *service) UpsertAiringSchedule(a AiringRecord) error {
-	_, err := s.db.Exec(`
-        INSERT INTO airing_schedule (anime_id, episode, airing_at, time_until_airing, updated_at)
-        VALUES (?, ?, ?, ?, ?)
+	scheduleDay, timing := utils.Get30HourSchedule(a.AiringAt)
+
+	query := `
+        INSERT INTO airing_schedule (anime_id, episode, airing_at, time_until_airing, updated_at, schedule_day, timing)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT(anime_id, episode) DO UPDATE SET
             airing_at = excluded.airing_at,
             time_until_airing = excluded.time_until_airing,
-            updated_at = excluded.updated_at
-    `, a.AnimeID, a.Episode, a.AiringAt, a.TimeUntilAiring, time.Now().UnixMilli())
+            updated_at = excluded.updated_at,
+            schedule_day = excluded.schedule_day,
+            timing = excluded.timing
+    `
+	_, err := s.pool.Exec(context.Background(), query, a.AnimeID, a.Episode, a.AiringAt, a.TimeUntilAiring, time.Now().UnixMilli(), scheduleDay, timing)
 	if err != nil {
 		return fmt.Errorf("failed to upsert airing schedule: %w", err)
 	}
@@ -59,7 +68,7 @@ func (s *service) GetWeeklySchedule() ([]AiringRecord, error) {
 	weekEnd := now + (7 * 24 * 60 * 60)
 
 	var results []AiringRecord
-	err := s.db.Select(&results, `
+	query := `
         SELECT 
             asch.id,
             asch.anime_id,
@@ -69,15 +78,45 @@ func (s *service) GetWeeklySchedule() ([]AiringRecord, error) {
             asch.updated_at,
             COALESCE(a.title, '') AS title,
             COALESCE(a.original_title, '') AS original_title,
-            COALESCE(a.cover, '') AS cover
+            COALESCE(a.cover, '') AS cover,
+            asch.schedule_day,
+            asch.timing
         FROM airing_schedule asch
         LEFT JOIN anime a ON asch.anime_id = a.id
-        WHERE asch.airing_at BETWEEN ? AND ?
+        WHERE asch.airing_at BETWEEN $1 AND $2
         ORDER BY asch.airing_at ASC
-    `, now, weekEnd)
+    `
+	rows, err := s.pool.Query(context.Background(), query, now, weekEnd)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get weekly schedule: %w", err)
 	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var r AiringRecord
+		err := rows.Scan(
+			&r.ID,
+			&r.AnimeID,
+			&r.Episode,
+			&r.AiringAt,
+			&r.TimeUntilAiring,
+			&r.UpdatedAt,
+			&r.Title,
+			&r.OriginalTitle,
+			&r.Cover,
+			&r.ScheduleDay,
+			&r.Timing,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan weekly schedule row: %w", err)
+		}
+		results = append(results, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("weekly schedule rows error: %w", err)
+	}
+
 	return results, nil
 }
 
@@ -90,7 +129,7 @@ func (s *service) UpsertAnime(ctx context.Context, a AnimeRecord) error {
 			id, type, title, original_title, cover, banner, description,
 			score, genres, status, season, season_year, total_episodes,
 			duration, next_airing_episode, next_airing_at, updated_at, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		ON CONFLICT(id) DO UPDATE SET
 			cover = excluded.cover,
 			banner = excluded.banner,
@@ -107,7 +146,7 @@ func (s *service) UpsertAnime(ctx context.Context, a AnimeRecord) error {
 			END
 	`
 
-	_, err := s.db.ExecContext(ctx, stmt,
+	_, err := s.pool.Exec(ctx, stmt,
 		a.ID, a.Type, a.Title, a.OriginalTitle, a.Cover, a.Banner, a.Description,
 		a.Score, a.Genres, a.Status, a.Season, a.SeasonYear, a.TotalEpisodes,
 		a.Duration, a.NextAiringEp, a.NextAiringAt,
@@ -122,18 +161,18 @@ func (s *service) UpsertAnime(ctx context.Context, a AnimeRecord) error {
 
 // BulkUpsertAnime updates or inserts multiple anime records inside a database transaction.
 func (s *service) BulkUpsertAnime(ctx context.Context, records []AnimeRecord) error {
-	tx, err := s.db.BeginTxx(ctx, nil)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	stmt := `
 		INSERT INTO anime (
 			id, type, title, original_title, cover, banner, description,
 			score, genres, status, season, season_year, total_episodes,
 			duration, next_airing_episode, next_airing_at, updated_at, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		ON CONFLICT(id) DO UPDATE SET
 			cover = excluded.cover,
 			banner = excluded.banner,
@@ -151,7 +190,7 @@ func (s *service) BulkUpsertAnime(ctx context.Context, records []AnimeRecord) er
 	`
 
 	for _, a := range records {
-		_, err = tx.ExecContext(ctx, stmt,
+		_, err = tx.Exec(ctx, stmt,
 			a.ID, a.Type, a.Title, a.OriginalTitle, a.Cover, a.Banner, a.Description,
 			a.Score, a.Genres, a.Status, a.Season, a.SeasonYear, a.TotalEpisodes,
 			a.Duration, a.NextAiringEp, a.NextAiringAt,
@@ -162,7 +201,7 @@ func (s *service) BulkUpsertAnime(ctx context.Context, records []AnimeRecord) er
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
@@ -171,7 +210,7 @@ func (s *service) BulkUpsertAnime(ctx context.Context, records []AnimeRecord) er
 
 func (s *service) GetCurrentAiring(ctx context.Context, page, perPage int) ([]AnimeRecord, error) {
 	var results []AnimeRecord
-	err := s.db.SelectContext(ctx, &results, `
+	query := `
         SELECT 
             id, type, title, original_title, cover, banner, description,
             score, genres, status, season, season_year, total_episodes,
@@ -179,10 +218,45 @@ func (s *service) GetCurrentAiring(ctx context.Context, page, perPage int) ([]An
         FROM anime
         WHERE status = 'RELEASING'
         ORDER BY updated_at DESC
-        LIMIT ? OFFSET ?
-    `, perPage, (page-1)*perPage)
+        LIMIT $1 OFFSET $2
+    `
+	rows, err := s.pool.Query(ctx, query, perPage, (page-1)*perPage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current airing: %w", err)
 	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var a AnimeRecord
+		err := rows.Scan(
+			&a.ID,
+			&a.Type,
+			&a.Title,
+			&a.OriginalTitle,
+			&a.Cover,
+			&a.Banner,
+			&a.Description,
+			&a.Score,
+			&a.Genres,
+			&a.Status,
+			&a.Season,
+			&a.SeasonYear,
+			&a.TotalEpisodes,
+			&a.Duration,
+			&a.NextAiringEp,
+			&a.NextAiringAt,
+			&a.UpdatedAt,
+			&a.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan current airing row: %w", err)
+		}
+		results = append(results, a)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("current airing rows error: %w", err)
+	}
+
 	return results, nil
 }

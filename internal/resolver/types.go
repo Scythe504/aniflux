@@ -48,12 +48,14 @@ type Airing struct {
 }
 
 type Episode struct {
-	Id       int    `json:"id"`
-	Number   string `json:"number"`
-	Title    string `json:"title"`
-	AirDate  int64  `json:"air_date"`
-	Overview string `json:"overview"`
-	Image    string `json:"image"`
+	Id          int    `json:"id"`
+	Number      string `json:"number"`
+	Title       string `json:"title"`
+	AirDate     int64  `json:"air_date"`
+	Overview    string `json:"overview"`
+	Image       string `json:"image"`
+	ScheduleDay string `json:"schedule_day,omitempty"`
+	Timing      string `json:"timing,omitempty"`
 }
 
 type EpisodeList struct {

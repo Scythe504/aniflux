@@ -184,12 +184,14 @@ func fromAiringRecord(ar *database.AiringRecord) Episode {
 	}
 	animeIDInt, _ := strconv.Atoi(ar.AnimeID)
 	return Episode{
-		Id:       animeIDInt,
-		Number:   strconv.Itoa(ar.Episode),
-		Title:    title,
-		AirDate:  ar.AiringAt * 1000,
-		Overview: "",
-		Image:    ar.Cover,
+		Id:          animeIDInt,
+		Number:      strconv.Itoa(ar.Episode),
+		Title:       title,
+		AirDate:     ar.AiringAt * 1000,
+		Overview:    "",
+		Image:       ar.Cover,
+		ScheduleDay: ar.ScheduleDay,
+		Timing:      ar.Timing,
 	}
 }
 

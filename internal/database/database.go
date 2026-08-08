@@ -2,18 +2,18 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"fmt"
-	"github.com/jmoiron/sqlx"
 	"log"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/pressly/goose/v3"
-	_ "modernc.org/sqlite"
 )
 
 // Service represents a service that interacts with a database.
@@ -25,20 +25,18 @@ type Service interface {
 	UpsertAiringSchedule(a AiringRecord) error
 
 	// Health returns a map of health status information.
-	// The keys and values in the map are service-specific.
 	Health() map[string]string
 
 	// Close terminates the database connection.
-	// It returns an error if the connection cannot be closed.
 	Close() error
 }
 
 type service struct {
-	db *sqlx.DB
+	pool *pgxpool.Pool
 }
 
 var (
-	dburl      = os.Getenv("BLUEPRINT_DB_URL")
+	dburl      string
 	dbInstance *service
 )
 
@@ -53,41 +51,42 @@ func New() Service {
 
 	url := os.Getenv("BLUEPRINT_DB_URL")
 	if url == "" {
-		url = "./data/aniflux.db"
+		url = "postgres://postgres:mysecretpassword@localhost:5432/postgres?sslmode=disable"
 	}
+	dburl = url
 
-	// Ensure parent directory exists for SQLite db file
-	dir := filepath.Dir(url)
-	if dir != "" && dir != "." {
-		_ = os.MkdirAll(dir, 0755)
-	}
+	// Initialize pgxpool
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	db, err := sqlx.Open("sqlite", url)
+	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
-		// This will not be a connection error, but a DSN parse error or
-		// another initialization error.
-		log.Fatal(err)
+		log.Fatalf("failed to create pgxpool: %v", err)
 	}
 
 	dbInstance = &service{
-		db: db,
+		pool: pool,
 	}
 
-	if err := dbInstance.migrate(); err != nil {
-		log.Fatal(err)
-	}
 	return dbInstance
 }
 
-func (s *service) migrate() error {
+// Migrate runs goose database migrations for PostgreSQL.
+func Migrate(url string) error {
+	sqlDb, err := sql.Open("pgx", url)
+	if err != nil {
+		return fmt.Errorf("failed to open database connection for migration: %w", err)
+	}
+	defer sqlDb.Close()
+
 	goose.SetBaseFS(embedMigrations)
 	goose.SetLogger(log.New(os.Stderr, "", log.LstdFlags))
 
-	if err := goose.SetDialect("sqlite3"); err != nil {
+	if err := goose.SetDialect("postgres"); err != nil {
 		return err
 	}
 
-	if err := goose.Up(s.db.DB, "migrations"); err != nil {
+	if err := goose.Up(sqlDb, "migrations"); err != nil {
 		return err
 	}
 
@@ -95,15 +94,14 @@ func (s *service) migrate() error {
 }
 
 // Health checks the health of the database connection by pinging the database.
-// It returns a map with keys indicating various health statistics.
 func (s *service) Health() map[string]string {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	stats := make(map[string]string)
 
-	// Ping the database
-	err := s.db.PingContext(ctx)
+	// Ping the database pool
+	err := s.pool.Ping(ctx)
 	if err != nil {
 		stats["status"] = "down"
 		stats["error"] = fmt.Sprintf("db down: %v", err)
@@ -111,45 +109,22 @@ func (s *service) Health() map[string]string {
 		return stats
 	}
 
-	// Database is up, add more statistics
+	// Database is up, add pool statistics
 	stats["status"] = "up"
 	stats["message"] = "It's healthy"
 
-	// Get database stats (like open connections, in use, idle, etc.)
-	dbStats := s.db.Stats()
-	stats["open_connections"] = strconv.Itoa(dbStats.OpenConnections)
-	stats["in_use"] = strconv.Itoa(dbStats.InUse)
-	stats["idle"] = strconv.Itoa(dbStats.Idle)
-	stats["wait_count"] = strconv.FormatInt(dbStats.WaitCount, 10)
-	stats["wait_duration"] = dbStats.WaitDuration.String()
-	stats["max_idle_closed"] = strconv.FormatInt(dbStats.MaxIdleClosed, 10)
-	stats["max_lifetime_closed"] = strconv.FormatInt(dbStats.MaxLifetimeClosed, 10)
-
-	// Evaluate stats to provide a health message
-	if dbStats.OpenConnections > 40 { // Assuming 50 is the max for this example
-		stats["message"] = "The database is experiencing heavy load."
-	}
-
-	if dbStats.WaitCount > 1000 {
-		stats["message"] = "The database has a high number of wait events, indicating potential bottlenecks."
-	}
-
-	if dbStats.MaxIdleClosed > int64(dbStats.OpenConnections)/2 {
-		stats["message"] = "Many idle connections are being closed, consider revising the connection pool settings."
-	}
-
-	if dbStats.MaxLifetimeClosed > int64(dbStats.OpenConnections)/2 {
-		stats["message"] = "Many connections are being closed due to max lifetime, consider increasing max lifetime or revising the connection usage pattern."
-	}
+	poolStat := s.pool.Stat()
+	stats["open_connections"] = strconv.Itoa(int(poolStat.TotalConns()))
+	stats["in_use"] = strconv.Itoa(int(poolStat.AcquiredConns()))
+	stats["idle"] = strconv.Itoa(int(poolStat.IdleConns()))
+	stats["max_connections"] = strconv.Itoa(int(poolStat.MaxConns()))
 
 	return stats
 }
 
 // Close closes the database connection.
-// It logs a message indicating the disconnection from the specific database.
-// If the connection is successfully closed, it returns nil.
-// If an error occurs while closing the connection, it returns the error.
 func (s *service) Close() error {
 	log.Printf("Disconnected from database: %s", dburl)
-	return s.db.Close()
+	s.pool.Close()
+	return nil
 }

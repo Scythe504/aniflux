@@ -1,6 +1,6 @@
 # AniFlux Worker & API Makefile
 
-all: build-worker test
+all: build-worker build-migrate test
 
 # Pre-build setup step (DB migrations / seeding)
 prebuild:
@@ -12,6 +12,11 @@ build-worker:
 	@echo "Building AniFlux Worker binary..."
 	@go build -o bin/worker cmd/worker/main.go
 
+# Build the database migration tool
+build-migrate:
+	@echo "Building AniFlux Database Migration binary..."
+	@go build -o bin/migrate cmd/migrate/main.go
+
 # Build the API binary
 build-api:
 	@echo "Building AniFlux API binary..."
@@ -20,6 +25,10 @@ build-api:
 # Run the compiled worker executable directly (accepting JSON payload on Stdin)
 run-worker:
 	@./bin/worker
+
+# Run the database migrations
+migrate:
+	@go run cmd/migrate/main.go
 
 # Test the application
 test:
@@ -31,4 +40,4 @@ clean:
 	@echo "Cleaning..."
 	@rm -rf bin/ main
 
-.PHONY: all prebuild build-worker build-api run-worker test clean
+.PHONY: all prebuild build-worker build-migrate build-api run-worker migrate test clean

@@ -1,11 +1,11 @@
 -- +goose Up
 CREATE TABLE IF NOT EXISTS airing_schedule (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     anime_id TEXT NOT NULL REFERENCES anime(id),
     episode INTEGER NOT NULL,
-    airing_at INTEGER NOT NULL,
-    time_until_airing INTEGER,
-    updated_at INTEGER NOT NULL,
+    airing_at BIGINT NOT NULL,
+    time_until_airing BIGINT,
+    updated_at BIGINT NOT NULL,
     UNIQUE(anime_id, episode)
 );
 
