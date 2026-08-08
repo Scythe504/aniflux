@@ -51,6 +51,12 @@ func New() Service {
 
 	url := os.Getenv("BLUEPRINT_DB_URL")
 	if url == "" {
+		url = os.Getenv("DB_URL")
+	}
+	if url == "" {
+		url = os.Getenv("DATABASE_URL")
+	}
+	if url == "" {
 		url = "postgres://postgres:mysecretpassword@localhost:5432/postgres?sslmode=disable"
 	}
 	dburl = url
@@ -59,10 +65,16 @@ func New() Service {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	log.Println("Initializing database connection pool...")
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		log.Fatalf("failed to create pgxpool: %v", err)
 	}
+
+	if err := pool.Ping(ctx); err != nil {
+		log.Fatalf("failed to ping database: %v", err)
+	}
+	log.Println("Database connection pool established successfully.")
 
 	dbInstance = &service{
 		pool: pool,
@@ -105,7 +117,7 @@ func (s *service) Health() map[string]string {
 	if err != nil {
 		stats["status"] = "down"
 		stats["error"] = fmt.Sprintf("db down: %v", err)
-		log.Fatalf("db down: %v", err) // Log the error and terminate the program
+		log.Printf("db health check failed: %v", err) // Log the error but don't terminate
 		return stats
 	}
 
