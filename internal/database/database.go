@@ -36,7 +36,6 @@ type service struct {
 }
 
 var (
-	dburl      string
 	dbInstance *service
 )
 
@@ -59,7 +58,7 @@ func New() Service {
 	if url == "" {
 		url = "postgres://postgres:mysecretpassword@localhost:5432/postgres?sslmode=disable"
 	}
-	dburl = url
+
 
 	// Initialize pgxpool
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -136,7 +135,7 @@ func (s *service) Health() map[string]string {
 
 // Close closes the database connection.
 func (s *service) Close() error {
-	log.Printf("Disconnected from database: %s", dburl)
+	log.Println("Disconnected from database pool.")
 	s.pool.Close()
 	return nil
 }
